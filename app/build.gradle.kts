@@ -1,6 +1,8 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.spotless)
+    alias(libs.plugins.detekt)
 }
 
 android {
@@ -35,6 +37,30 @@ android {
     buildFeatures {
         compose = true
     }
+}
+
+spotless {
+    // Spotless defaults ktlint's editorConfigPath to the *subproject* dir, so the root
+    // .editorconfig (shared with the IDE and detekt) was ignored. Point at it explicitly.
+    // Standard props (indent, max_line_length, code style) then come from the file, but Spotless
+    // does NOT forward per-rule enable/disable toggles from .editorconfig — those must go through
+    // editorConfigOverride (known diffplug/spotless behavior). Naming is left to detekt (which
+    // exempts @Composable by default); mirrors iOS swiftlint disabling identifier_name/type_name.
+    val editorConfig = "$rootDir/.editorconfig"
+    val ktlintOverrides = mapOf("ktlint_standard_function-naming" to "disabled")
+    kotlin {
+        target("src/**/*.kt")
+        ktlint().setEditorConfigPath(editorConfig).editorConfigOverride(ktlintOverrides)
+    }
+    kotlinGradle {
+        target("*.gradle.kts")
+        ktlint().setEditorConfigPath(editorConfig).editorConfigOverride(ktlintOverrides)
+    }
+}
+
+detekt {
+    buildUponDefaultConfig = true
+    config.setFrom("$rootDir/config/detekt/detekt.yml")
 }
 
 dependencies {

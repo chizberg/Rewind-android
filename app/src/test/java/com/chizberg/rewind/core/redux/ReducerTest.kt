@@ -3,6 +3,8 @@
 package com.chizberg.rewind.core.redux
 
 import app.cash.turbine.test
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -15,15 +17,10 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
-import kotlin.time.Duration.Companion.milliseconds
-import kotlin.time.Duration.Companion.seconds
 
 // MARK: - Test fixtures
 
-private data class TestState(
-    val count: Int = 0,
-    val applied: List<String> = emptyList(),
-)
+private data class TestState(val count: Int = 0, val applied: List<String> = emptyList())
 
 private typealias TestAsyncEffect = AsyncEffect<TestAction>
 
@@ -45,27 +42,26 @@ private sealed interface TestAction {
 private fun makeReducer(
     scope: CoroutineScope,
     initial: TestState = TestState(),
-): Reducer<TestState, TestAction> =
-    Reducer(initial, scope) { state, action, effect, asyncEffect ->
-        when (action) {
-            TestAction.Increment -> state.copy(count = state.count + 1)
-            is TestAction.Add -> state.copy(count = state.count + action.value)
-            is TestAction.Mark -> state.copy(applied = state.applied + action.tag)
-            is TestAction.SyncEffects -> {
-                action.effects.forEach(effect)
-                state
-            }
-            is TestAction.AsyncEffects -> {
-                action.effects.forEach(asyncEffect)
-                state
-            }
-            is TestAction.Mixed -> {
-                action.sync.forEach(effect)
-                action.async.forEach(asyncEffect)
-                state
-            }
+): Reducer<TestState, TestAction> = Reducer(initial, scope) { state, action, effect, asyncEffect ->
+    when (action) {
+        TestAction.Increment -> state.copy(count = state.count + 1)
+        is TestAction.Add -> state.copy(count = state.count + action.value)
+        is TestAction.Mark -> state.copy(applied = state.applied + action.tag)
+        is TestAction.SyncEffects -> {
+            action.effects.forEach(effect)
+            state
+        }
+        is TestAction.AsyncEffects -> {
+            action.effects.forEach(asyncEffect)
+            state
+        }
+        is TestAction.Mixed -> {
+            action.sync.forEach(effect)
+            action.async.forEach(asyncEffect)
+            state
         }
     }
+}
 
 /**
  * Runs a test giving the reducer a scope backed by the test scheduler (NOT `backgroundScope`, whose
@@ -201,7 +197,11 @@ class ReducerAsyncEffectTest {
     @Test
     fun anotherActionEffectDispatchesFollowUp() = reducerTest { scope ->
         val reducer = makeReducer(scope)
-        reducer(TestAction.AsyncEffects(listOf(AsyncEffect.anotherAction(id = "x", action = TestAction.Increment))))
+        reducer(
+            TestAction.AsyncEffects(
+                listOf(AsyncEffect.anotherAction(id = "x", action = TestAction.Increment)),
+            ),
+        )
         advanceUntilIdle()
         assertEquals(1, reducer.state.value.count)
     }
@@ -211,7 +211,13 @@ class ReducerAsyncEffectTest {
         val reducer = makeReducer(scope)
         reducer(
             TestAction.AsyncEffects(
-                listOf(AsyncEffect.after(50.milliseconds, id = "t", anotherAction = TestAction.Increment)),
+                listOf(
+                    AsyncEffect.after(
+                        50.milliseconds,
+                        id = "t",
+                        anotherAction = TestAction.Increment,
+                    ),
+                ),
             ),
         )
         assertEquals(0, reducer.state.value.count) // scheduled, not run yet
@@ -227,9 +233,25 @@ class ReducerCancellationTest {
     fun sameIdReplacesPendingEffect() = reducerTest { scope ->
         val reducer = makeReducer(scope)
         // First effect would add 10 after a long delay...
-        reducer(TestAction.AsyncEffects(listOf(AsyncEffect.after(300.milliseconds, id = "x", anotherAction = TestAction.Add(10)))))
+        reducer(
+            TestAction.AsyncEffects(
+                listOf(
+                    AsyncEffect.after(
+                        300.milliseconds,
+                        id = "x",
+                        anotherAction = TestAction.Add(10),
+                    ),
+                ),
+            ),
+        )
         // ...but a second effect with the same id supersedes it.
-        reducer(TestAction.AsyncEffects(listOf(AsyncEffect.after(50.milliseconds, id = "x", anotherAction = TestAction.Add(1)))))
+        reducer(
+            TestAction.AsyncEffects(
+                listOf(
+                    AsyncEffect.after(50.milliseconds, id = "x", anotherAction = TestAction.Add(1)),
+                ),
+            ),
+        )
 
         advanceUntilIdle() // exhausts virtual time: the cancelled add(10) can never fire
         assertEquals(1, reducer.state.value.count)
@@ -238,7 +260,17 @@ class ReducerCancellationTest {
     @Test
     fun cancelEffectStopsPendingFollowUp() = reducerTest { scope ->
         val reducer = makeReducer(scope)
-        reducer(TestAction.AsyncEffects(listOf(AsyncEffect.after(200.milliseconds, id = "x", anotherAction = TestAction.Add(10)))))
+        reducer(
+            TestAction.AsyncEffects(
+                listOf(
+                    AsyncEffect.after(
+                        200.milliseconds,
+                        id = "x",
+                        anotherAction = TestAction.Add(10),
+                    ),
+                ),
+            ),
+        )
         reducer(TestAction.AsyncEffects(listOf(AsyncEffect.cancel(id = "x"))))
 
         advanceUntilIdle()
@@ -251,8 +283,16 @@ class ReducerCancellationTest {
         reducer(
             TestAction.AsyncEffects(
                 listOf(
-                    AsyncEffect.after(50.milliseconds, id = "a", anotherAction = TestAction.Increment),
-                    AsyncEffect.after(50.milliseconds, id = "b", anotherAction = TestAction.Increment),
+                    AsyncEffect.after(
+                        50.milliseconds,
+                        id = "a",
+                        anotherAction = TestAction.Increment,
+                    ),
+                    AsyncEffect.after(
+                        50.milliseconds,
+                        id = "b",
+                        anotherAction = TestAction.Increment,
+                    ),
                 ),
             ),
         )
@@ -263,10 +303,30 @@ class ReducerCancellationTest {
     @Test
     fun effectIdCanBeReusedAfterCancel() = reducerTest { scope ->
         val reducer = makeReducer(scope)
-        reducer(TestAction.AsyncEffects(listOf(AsyncEffect.after(200.milliseconds, id = "x", anotherAction = TestAction.Add(10)))))
+        reducer(
+            TestAction.AsyncEffects(
+                listOf(
+                    AsyncEffect.after(
+                        200.milliseconds,
+                        id = "x",
+                        anotherAction = TestAction.Add(10),
+                    ),
+                ),
+            ),
+        )
         reducer(TestAction.AsyncEffects(listOf(AsyncEffect.cancel(id = "x"))))
         // Re-arm the same id with a fresh effect; it should fire exactly once.
-        reducer(TestAction.AsyncEffects(listOf(AsyncEffect.after(50.milliseconds, id = "x", anotherAction = TestAction.Increment))))
+        reducer(
+            TestAction.AsyncEffects(
+                listOf(
+                    AsyncEffect.after(
+                        50.milliseconds,
+                        id = "x",
+                        anotherAction = TestAction.Increment,
+                    ),
+                ),
+            ),
+        )
 
         advanceUntilIdle()
         assertEquals(1, reducer.state.value.count) // the cancelled add(10) never fires
@@ -281,7 +341,16 @@ class ReducerDebounceTest {
         val reducer = makeReducer(scope)
         // Five rapid debounced dispatches share one id → only the last survives.
         repeat(5) {
-            reducer(TestAction.AsyncEffects(listOf(AsyncEffect.debounced(DebouncedActionId.RegionChanged, anotherAction = TestAction.Increment))))
+            reducer(
+                TestAction.AsyncEffects(
+                    listOf(
+                        AsyncEffect.debounced(
+                            DebouncedActionId.RegionChanged,
+                            anotherAction = TestAction.Increment,
+                        ),
+                    ),
+                ),
+            )
         }
         advanceUntilIdle()
         assertEquals(1, reducer.state.value.count)
@@ -290,7 +359,16 @@ class ReducerDebounceTest {
     @Test
     fun debouncedFiresExactlyAtDelayBoundary() = reducerTest { scope ->
         val reducer = makeReducer(scope)
-        reducer(TestAction.AsyncEffects(listOf(AsyncEffect.debounced(DebouncedActionId.RegionChanged, anotherAction = TestAction.Increment))))
+        reducer(
+            TestAction.AsyncEffects(
+                listOf(
+                    AsyncEffect.debounced(
+                        DebouncedActionId.RegionChanged,
+                        anotherAction = TestAction.Increment,
+                    ),
+                ),
+            ),
+        )
 
         advanceTimeBy(99.milliseconds)
         runCurrent()
@@ -306,7 +384,11 @@ class ReducerDebounceTest {
         val reducer = makeReducer(scope)
         reducer(
             TestAction.AsyncEffects(
-                listOf(AsyncEffect.debounced(DebouncedActionId.RegionChanged) { send -> send(TestAction.Add(3)) }),
+                listOf(
+                    AsyncEffect.debounced(DebouncedActionId.RegionChanged) { send ->
+                        send(TestAction.Add(3))
+                    },
+                ),
             ),
         )
         assertEquals(0, reducer.state.value.count) // debounce delay not elapsed yet
@@ -317,8 +399,19 @@ class ReducerDebounceTest {
     @Test
     fun cancelDebouncedStopsPendingFollowUp() = reducerTest { scope ->
         val reducer = makeReducer(scope)
-        reducer(TestAction.AsyncEffects(listOf(AsyncEffect.debounced(DebouncedActionId.RegionChanged, anotherAction = TestAction.Add(10)))))
-        reducer(TestAction.AsyncEffects(listOf(AsyncEffect.cancel(DebouncedActionId.RegionChanged))))
+        reducer(
+            TestAction.AsyncEffects(
+                listOf(
+                    AsyncEffect.debounced(
+                        DebouncedActionId.RegionChanged,
+                        anotherAction = TestAction.Add(10),
+                    ),
+                ),
+            ),
+        )
+        reducer(
+            TestAction.AsyncEffects(listOf(AsyncEffect.cancel(DebouncedActionId.RegionChanged))),
+        )
 
         advanceUntilIdle()
         assertEquals(0, reducer.state.value.count)

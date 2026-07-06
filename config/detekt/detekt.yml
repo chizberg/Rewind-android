@@ -1,0 +1,39 @@
+# detekt overrides on top of the default config (buildUponDefaultConfig = true).
+# Mirrors the spirit of the iOS .swiftlint.yml: silence the noisy length/complexity/
+# naming/magic-number rules, keep the substantive checks.
+
+complexity:
+  CyclomaticComplexMethod:
+    active: false      # ~ swiftlint cyclomatic_complexity
+  LongMethod:
+    active: false      # ~ function_body_length
+  LongParameterList:
+    active: false      # ~ function_parameter_count
+  NestedBlockDepth:
+    active: false      # ~ nesting
+  TooManyFunctions:
+    active: false
+  LargeClass:
+    active: false      # ~ type_body_length
+
+style:
+  MagicNumber:
+    active: false      # noisy; iOS has no equivalent enforced
+  ReturnCount:
+    active: false
+  ForbiddenComment:
+    active: false      # ~ todo
+  MaxLineLength:
+    maxLineLength: 100          # match ktlint / .editorconfig
+    excludeCommentStatements: true # ktlint owns code width and leaves comments alone; stay consistent
+  UnusedPrivateMember:
+    active: true
+
+naming:
+  VariableNaming:
+    # Allow leading-underscore backing properties (e.g. `_state`).
+    variablePattern: '[a-z_][A-Za-z0-9]*'
+  FunctionNaming:
+    # Test method names are plain camelCase; nothing exotic needed.
+    functionPattern: '[a-z][A-Za-z0-9]*'
+    ignoreAnnotated: ['Composable']  # @Composable funcs are PascalCase
