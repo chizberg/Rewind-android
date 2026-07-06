@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.rewind_android"
+    namespace = "com.chizberg.rewind"
     compileSdk {
         version = release(36) {
             minorApiLevel = 1
@@ -12,7 +12,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.rewind_android"
+        applicationId = "com.chizberg.rewind"
         minSdk = 31
         targetSdk = 36
         versionCode = 1

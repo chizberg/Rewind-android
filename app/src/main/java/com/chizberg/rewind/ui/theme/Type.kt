@@ -1,4 +1,4 @@
-package com.example.rewind_android.ui.theme
+package com.chizberg.rewind.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle

@@ -1,4 +1,4 @@
-package com.example.rewind_android
+package com.chizberg.rewind
 
 import org.junit.Test
 
