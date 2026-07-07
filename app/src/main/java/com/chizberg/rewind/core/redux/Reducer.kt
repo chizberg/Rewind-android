@@ -1,9 +1,5 @@
 package com.chizberg.rewind.core.redux
 
-import java.util.UUID
-import kotlin.time.Duration
-import kotlin.time.Duration.Companion.milliseconds
-import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -11,8 +7,15 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import java.util.UUID
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
-/** A synchronous side effect, run on the calling stack right after `reduce`. Mirrors iOS `Reducer.Effect`. */
+/**
+ * A synchronous side effect, run on the calling stack right after `reduce`.
+ * Mirrors iOS `Reducer.Effect`.
+ */
 typealias Effect = () -> Unit
 
 /**
@@ -43,7 +46,10 @@ class Reducer<State, Action>(
     private val _state = MutableStateFlow(initial)
     val state: StateFlow<State> get() = _state
 
-    /** In-flight async effects keyed by id. A new effect with the same id cancels and replaces the old one. */
+    /**
+     * In-flight async effects keyed by id. A new effect with the same id cancels and
+     * replaces the old one.
+     */
     private val asyncEffects = HashMap<String, Job>()
     private var isRunning = false
 
@@ -58,12 +64,13 @@ class Reducer<State, Action>(
         val newAsyncEffects = ArrayList<AsyncEffect<Action>>()
 
         isRunning = true
-        _state.value = reduce(
-            _state.value,
-            action,
-            { newEffects.add(it) },
-            { newAsyncEffects.add(it) },
-        )
+        _state.value =
+            reduce(
+                _state.value,
+                action,
+                { newEffects.add(it) },
+                { newAsyncEffects.add(it) },
+            )
         isRunning = false
 
         // Sync effects: in enqueue order, on the calling stack (may safely re-dispatch).
@@ -82,8 +89,14 @@ class Reducer<State, Action>(
         }
     }
 
-    /** iOS `adding(signal:)`: feed an external [flow] into the reducer as actions. Returns `this` for chaining. */
-    fun <Value> adding(flow: Flow<Value>, makeAction: (Value) -> Action): Reducer<State, Action> {
+    /**
+     * iOS `adding(signal:)`: feed an external [flow] into the reducer as actions.
+     * Returns `this` for chaining.
+     */
+    fun <Value> adding(
+        flow: Flow<Value>,
+        makeAction: (Value) -> Action,
+    ): Reducer<State, Action> {
         scope.launch { flow.collect { this@Reducer(makeAction(it)) } }
         return this
     }
@@ -102,7 +115,9 @@ class Reducer<State, Action>(
 }
 
 /** Shared debounce ids and their delays. Same values as iOS `DebouncedActionID`. */
-enum class DebouncedActionId(val delay: Duration) {
+enum class DebouncedActionId(
+    val delay: Duration,
+) {
     RegionChanged(100.milliseconds),
     UpdatePreviews(100.milliseconds),
     FiltersChanged(100.milliseconds),
@@ -132,21 +147,24 @@ class AsyncEffect<Action>(
         ): AsyncEffect<Action> = AsyncEffect(id, action)
 
         /** Dispatch a single [action] asynchronously. */
-        fun <Action> anotherAction(id: String = freshId(), action: Action): AsyncEffect<Action> =
-            AsyncEffect(id) { send -> send(action) }
+        fun <Action> anotherAction(
+            id: String = freshId(),
+            action: Action,
+        ): AsyncEffect<Action> = AsyncEffect(id) { send -> send(action) }
 
         /**
-         * Dispatch [anotherAction] after [delay]. If the effect is cancelled first, `delay` throws
-         * `CancellationException` and nothing is dispatched — equivalent to iOS swallowing the error.
+         * Dispatch [anotherAction] after [delay]. If the effect is cancelled first, `delay`
+         * throws `CancellationException` and nothing is dispatched — as iOS swallows the error.
          */
         fun <Action> after(
             delay: Duration,
             id: String = freshId(),
             anotherAction: Action,
-        ): AsyncEffect<Action> = AsyncEffect(id) { send ->
-            delay(delay)
-            send(anotherAction)
-        }
+        ): AsyncEffect<Action> =
+            AsyncEffect(id) { send ->
+                delay(delay)
+                send(anotherAction)
+            }
 
         /** An empty effect that just cancels any in-flight effect with [id]. */
         fun <Action> cancel(id: String): AsyncEffect<Action> = AsyncEffect(id) { }
@@ -159,13 +177,17 @@ class AsyncEffect<Action>(
         fun <Action> debounced(
             id: DebouncedActionId,
             action: suspend (send: suspend (Action) -> Unit) -> Unit,
-        ): AsyncEffect<Action> = AsyncEffect(id.id) { send ->
-            delay(id.delay)
-            action(send)
-        }
+        ): AsyncEffect<Action> =
+            AsyncEffect(id.id) { send ->
+                delay(id.delay)
+                action(send)
+            }
 
         /** Debounced single action: waits [id]`.delay`, then dispatches [anotherAction]. */
-        fun <Action> debounced(id: DebouncedActionId, anotherAction: Action): AsyncEffect<Action> =
+        fun <Action> debounced(
+            id: DebouncedActionId,
+            anotherAction: Action,
+        ): AsyncEffect<Action> =
             AsyncEffect(id.id) { send ->
                 delay(id.delay)
                 send(anotherAction)

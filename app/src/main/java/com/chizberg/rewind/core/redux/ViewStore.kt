@@ -23,10 +23,11 @@ class ViewStore<State, Action>(
     fun <NewState, NewAction> bimap(
         state: (State) -> NewState,
         action: (NewAction) -> Action,
-    ): ViewStore<NewState, NewAction> = ViewStore(
-        state = MappedStateFlow(this.state, state),
-        actionPerformer = { newAction -> this.invoke(action(newAction)) },
-    )
+    ): ViewStore<NewState, NewAction> =
+        ViewStore(
+            state = MappedStateFlow(this.state, state),
+            actionPerformer = { newAction -> this.invoke(action(newAction)) },
+        )
 }
 
 /** iOS `Reducer.viewStore`. */

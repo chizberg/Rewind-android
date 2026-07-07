@@ -25,7 +25,7 @@ style:
     active: false      # ~ todo
   MaxLineLength:
     maxLineLength: 100          # match ktlint / .editorconfig
-    excludeCommentStatements: true # ktlint owns code width and leaves comments alone; stay consistent
+    excludeCommentStatements: true # ktlint already enforces width on comments; avoid double-reporting
   UnusedPrivateMember:
     active: true
 

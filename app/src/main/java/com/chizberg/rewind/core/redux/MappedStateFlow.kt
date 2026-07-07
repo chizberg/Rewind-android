@@ -11,8 +11,10 @@ import kotlinx.coroutines.flow.StateFlow
  * value, and collectors receive mapped updates. Used by [ViewStore.bimap].
  */
 @OptIn(ExperimentalForInheritanceCoroutinesApi::class)
-class MappedStateFlow<T, R>(private val source: StateFlow<T>, private val transform: (T) -> R) :
-    StateFlow<R> {
+class MappedStateFlow<T, R>(
+    private val source: StateFlow<T>,
+    private val transform: (T) -> R,
+) : StateFlow<R> {
     override val value: R get() = transform(source.value)
     override val replayCache: List<R> get() = listOf(value)
 
