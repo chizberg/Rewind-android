@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.spotless)
     alias(libs.plugins.detekt)
+    alias(libs.plugins.secrets)
 }
 
 android {
@@ -38,7 +39,16 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
+}
+
+secrets {
+    // Keys live in local.properties (gitignored). secrets.defaults.properties holds committed
+    // placeholders so the project builds on a fresh checkout / CI without the real keys.
+    // Each key is exposed as both a manifest placeholder (${MAPS_API_KEY}) and a BuildConfig
+    // field (BuildConfig.GOOGLE_REST_API_KEY). Mirrors iOS Secrets.xcconfig -> Info.plist.
+    defaultPropertiesFileName = "secrets.defaults.properties"
 }
 
 spotless {
@@ -78,6 +88,8 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp)
+    implementation(libs.maps.compose)
+    implementation(libs.play.services.maps)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.okhttp.mockwebserver)
