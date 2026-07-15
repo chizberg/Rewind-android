@@ -3,7 +3,6 @@ package com.chizberg.rewind.features.map
 import com.chizberg.rewind.domain.ModelCluster
 import com.chizberg.rewind.domain.ModelImage
 import com.chizberg.rewind.domain.ModelLocalCluster
-import com.chizberg.rewind.domain.delta
 import com.chizberg.rewind.network.AnnotationLoadingParams
 import kotlin.math.floor
 
@@ -25,6 +24,13 @@ fun makeDiffAfterReceived(
     val last = state.lastLoadedParams
     val shouldClear = last != null && (last.zoom != params.zoom || last.filters != params.filters)
 
+    // Cell size = 1/8 of the *visible* longitude span (iOS uses `delta(zoom, mapSize)/8`, whose
+    // screen adjustment makes `delta` reconstruct the visible span). Android reads the real span
+    // directly, so we skip iOS's zoom<->span round-trip. longitudeDelta (not latitude) because in
+    // web-mercator it's constant at a given zoom regardless of pan — a stable grid, so a same-zoom
+    // pan's incremental merge never desyncs.
+    val cellSize = state.region.span.longitudeDelta / CLUSTERING_CELL_RATIO
+
     val toAdd = mutableListOf<AnnotationValue>()
     val toRemove = mutableListOf<AnnotationValue>()
 
@@ -45,9 +51,9 @@ fun makeDiffAfterReceived(
     val receivedImages = images.toSet()
     val newClusteredImages =
         if (shouldClear) {
-            regroupFromScratch(receivedImages, params.zoom, state.clusteredImages, toAdd, toRemove)
+            regroupFromScratch(receivedImages, cellSize, state.clusteredImages, toAdd, toRemove)
         } else {
-            applyIncremental(receivedImages, params.zoom, state.clusteredImages, toAdd, toRemove)
+            applyIncremental(receivedImages, cellSize, state.clusteredImages, toAdd, toRemove)
         }
 
     return ClusteringDiff(
@@ -59,7 +65,7 @@ fun makeDiffAfterReceived(
 
 private fun regroupFromScratch(
     receivedImages: Set<ModelImage>,
-    zoom: Int,
+    cellSize: Double,
     current: Map<ClusteringCell, CellValue>,
     toAdd: MutableList<AnnotationValue>,
     toRemove: MutableList<AnnotationValue>,
@@ -76,7 +82,7 @@ private fun regroupFromScratch(
     toRemove += staleImages.map { AnnotationValue.Image(it) }
 
     val regrouped = mutableMapOf<ClusteringCell, CellValue>()
-    for ((cell, cellImages) in groupImages(receivedImages, zoom)) {
+    for ((cell, cellImages) in groupImages(receivedImages, cellSize)) {
         if (cellImages.size < LOCAL_CLUSTER_MIN_COUNT) {
             regrouped[cell] = CellValue.Free(cellImages)
             toAdd += (cellImages - freeImages).map { AnnotationValue.Image(it) }
@@ -93,13 +99,13 @@ private fun regroupFromScratch(
 
 private fun applyIncremental(
     receivedImages: Set<ModelImage>,
-    zoom: Int,
+    cellSize: Double,
     current: Map<ClusteringCell, CellValue>,
     toAdd: MutableList<AnnotationValue>,
     toRemove: MutableList<AnnotationValue>,
 ): Map<ClusteringCell, CellValue> {
     val patches =
-        groupImages(receivedImages, zoom).mapNotNull { (cell, newImagesForCell) ->
+        groupImages(receivedImages, cellSize).mapNotNull { (cell, newImagesForCell) ->
             makePatch(cell, newImagesForCell, current[cell])?.let { cell to it }
         }
 
@@ -135,9 +141,8 @@ private fun applyIncremental(
 
 private fun groupImages(
     images: Set<ModelImage>,
-    zoom: Int,
+    size: Double,
 ): Map<ClusteringCell, Set<ModelImage>> {
-    val size = delta(zoom) / CLUSTERING_CELL_RATIO
     val result = mutableMapOf<ClusteringCell, MutableSet<ModelImage>>()
     for (image in images) {
         val cell =

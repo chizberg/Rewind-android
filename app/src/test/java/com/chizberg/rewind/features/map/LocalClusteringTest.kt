@@ -8,20 +8,21 @@ import com.chizberg.rewind.domain.ModelImage
 import com.chizberg.rewind.domain.ModelLocalCluster
 import com.chizberg.rewind.domain.Region
 import com.chizberg.rewind.domain.Span
-import com.chizberg.rewind.domain.delta
 import com.chizberg.rewind.network.AnnotationLoadingParams
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.pow
 
 /**
  * Mirror of iOS `LocalClusteringTests.swift`: the grid clustering diff [makeDiffAfterReceived].
- * Same scenarios and expectations; the fixture places images at cell centers using the same
- * `delta(zoom) / 8` cell size the algorithm uses, so grouping is identical despite Android's
- * `delta` dropping the iOS screen-size adjustment (only the absolute cell size differs, never the
- * relative grouping the tests assert on).
+ * The algorithm now derives the cell from the visible longitude span (`region.span / 8`), so
+ * [receive] sets `region.span` per the load's zoom (as the reducer's `regionChanged` does), and the
+ * fixture places images at cell centers using the same [cellSize]. Grouping is identical to before;
+ * `spanForZoom` keeps the old per-zoom scale so the relative assertions (e.g. zoom 13 vs 10 → ×8
+ * cell) are unchanged.
  */
 class LocalClusteringTest {
     // MARK: Cluster formation (fresh state, first load → no clearing)
@@ -445,8 +446,14 @@ class LocalClusteringTest {
 
 // MARK: - Fixtures
 
+/**
+ * A visible longitude span for a zoom. Any function that halves per zoom step works — the tests
+ * only assert *relative* grouping (e.g. zoom 13 vs 10 → ×8 cell); this keeps the old numbers.
+ */
+private fun spanForZoom(zoom: Int): Double = 360.0 / 2.0.pow(zoom)
+
 /** Grid cell size in degrees for a zoom — mirrors `CLUSTERING_CELL_RATIO = 8`. */
-private fun cellSize(zoom: Int): Double = delta(zoom) / 8.0
+private fun cellSize(zoom: Int): Double = spanForZoom(zoom) / 8.0
 
 /**
  * An image at the *center* of grid cell `(lat, lon)` for `zoom`. Placing at the center guarantees
@@ -541,7 +548,13 @@ private fun receive(
     clusters: List<ModelCluster> = emptyList(),
     params: AnnotationLoadingParams,
 ): Received {
-    val diff = makeDiffAfterReceived(images, clusters, params, state)
+    // The reducer sets region (hence the clustering span) on regionChanged before the load; mirror
+    // that so the load's cell size matches params.zoom.
+    val stateForZoom =
+        state.copy(
+            region = state.region.copy(span = Span(0.0, spanForZoom(params.zoom))),
+        )
+    val diff = makeDiffAfterReceived(images, clusters, params, stateForZoom)
     return Received(
         state = diff.state.copy(lastLoadedParams = params),
         toAdd = diff.toAdd,

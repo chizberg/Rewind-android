@@ -9,7 +9,6 @@ import com.chizberg.rewind.domain.ModelCluster
 import com.chizberg.rewind.domain.ModelImage
 import com.chizberg.rewind.domain.Region
 import com.chizberg.rewind.domain.Span
-import com.chizberg.rewind.domain.delta
 import com.chizberg.rewind.network.AnnotationLoadingParams
 import com.chizberg.rewind.network.Remote
 import kotlinx.coroutines.CompletableDeferred
@@ -28,6 +27,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Ignore
 import org.junit.Test
+import kotlin.math.pow
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -108,7 +108,7 @@ class MapModelTest {
             val imagesA = (0 until 12).map { img(it + 1, cellLat = it, cellLon = 0, zoom = 10) }
             val clusterA = serverCluster(41)
             remote.response = imagesA to listOf(clusterA)
-            model(MapAction.External.Map.RegionChanged(region(), zoom = 10))
+            model(MapAction.External.Map.RegionChanged(region(zoom = 10), zoom = 10))
             advanceUntilIdle()
             assertEquals(imagesA.toSet(), model.state.value.imageValues)
             assertEquals(listOf(clusterA), model.state.value.clusterValues)
@@ -123,7 +123,7 @@ class MapModelTest {
             val clusterB = serverCluster(42)
             remote.gateNextCall = true
             remote.response = imagesB to listOf(clusterB)
-            model(MapAction.External.Map.RegionChanged(region(), zoom = 12))
+            model(MapAction.External.Map.RegionChanged(region(zoom = 12), zoom = 12))
             advanceUntilIdle()
             assertEquals(2, remote.loadCount)
             assertTrue(model.state.value.isLoading)
@@ -146,7 +146,9 @@ class MapModelTest {
                     )
                 }
             remote.response = imagesC to emptyList()
-            model(MapAction.External.Map.RegionChanged(region(latOffset = 1.0), zoom = 12))
+            model(
+                MapAction.External.Map.RegionChanged(region(zoom = 12, latOffset = 1.0), zoom = 12),
+            )
             advanceUntilIdle()
             assertEquals((imagesB + imagesC).toSet(), model.state.value.imageValues)
             assertEquals(listOf(clusterB), model.state.value.clusterValues) // server cluster kept
@@ -173,7 +175,7 @@ class MapModelTest {
             remote.response =
                 (listOf(survivor) + (2..3).map { img(it, cellLat = it, cellLon = 0, zoom = 10) }) to
                 listOf(serverCluster(41))
-            model(MapAction.External.Map.RegionChanged(region(), zoom = 10))
+            model(MapAction.External.Map.RegionChanged(region(zoom = 10), zoom = 10))
             advanceUntilIdle()
             assertTrue(
                 model.state.value.annotations
@@ -255,14 +257,25 @@ class MapModelTest {
 
 // MARK: - Fixtures
 
-private fun region(latOffset: Double = 0.0): Region =
+/**
+ * A region whose longitude span matches [zoom] — the reducer derives the clustering cell from
+ * `region.span.longitudeDelta / 8`, so the span must scale with zoom for the [img] placement (which
+ * uses the same [cellSize]) to line up. Mirrors LocalClusteringTest.
+ */
+private fun region(
+    zoom: Int = 13,
+    latOffset: Double = 0.0,
+): Region =
     Region(
         center = Coordinate(latitude = 50.0 + latOffset, longitude = 14.0),
-        span = Span(latitudeDelta = 0.5, longitudeDelta = 0.5),
+        span = Span(latitudeDelta = spanForZoom(zoom), longitudeDelta = spanForZoom(zoom)),
     )
 
+/** A visible longitude span for a zoom (halves per zoom step); mirrors LocalClusteringTest. */
+private fun spanForZoom(zoom: Int): Double = 360.0 / 2.0.pow(zoom)
+
 /** Grid cell size in degrees for a zoom — mirrors `CLUSTERING_CELL_RATIO = 8`. */
-private fun cellSize(zoom: Int): Double = delta(zoom) / 8.0
+private fun cellSize(zoom: Int): Double = spanForZoom(zoom) / 8.0
 
 /**
  * An image at the *center* of grid cell `(lat, lon)` for `zoom` (mirrors LocalClusteringTest), so
