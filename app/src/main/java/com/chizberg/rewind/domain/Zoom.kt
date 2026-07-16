@@ -10,7 +10,9 @@ import kotlin.math.roundToInt
  *
  * iOS's `delta(zoom:mapSize:)` is deliberately NOT ported: its screen adjustment makes it
  * reconstruct the visible span, which the clustering used as its cell base. Android has the real
- * visible span from the camera, so LocalClustering derives the cell from `region.span` directly.
+ * visible span from the camera, so LocalClustering derives the cell from `region.span` — but snaps
+ * it to this rounded [zoom] (via the raw camera zoom) so the grid stays fixed within a bucket, the
+ * way iOS's rounded-zoom `delta` does. See LocalClustering's cell-size comment.
  */
 
 // iOS clamps the reconstructed zoom to 3...19.

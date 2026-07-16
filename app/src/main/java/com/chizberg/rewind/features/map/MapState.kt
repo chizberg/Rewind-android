@@ -21,11 +21,15 @@ import com.chizberg.rewind.network.AnnotationLoadingParams
 data class MapState(
     val region: Region,
     val zoom: Int,
+    val cameraZoom: Float,
     val filters: ImageRequestFilters,
     val isLoading: Boolean,
     val lastLoadedParams: AnnotationLoadingParams?,
     val clusters: Set<ModelCluster>,
     val clusteredImages: Map<ClusteringCell, CellValue>,
+    // The local-clustering grid cell's longitude span, held fixed for the whole rounded-zoom bucket
+    // (LocalClustering recomputes it only when the bucket changes). 0.0 until the first load.
+    val clusteringCellSpan: Double = 0.0,
 ) {
     /**
      * The full set of renderable annotations projected from [clusters] + [clusteredImages]. This is
@@ -58,6 +62,7 @@ data class MapState(
                         span = Span(latitudeDelta = 0.0, longitudeDelta = 0.0),
                     ),
                 zoom = INITIAL_ZOOM,
+                cameraZoom = INITIAL_ZOOM.toFloat(),
                 filters = ImageRequestFilters.default,
                 isLoading = false,
                 lastLoadedParams = null,

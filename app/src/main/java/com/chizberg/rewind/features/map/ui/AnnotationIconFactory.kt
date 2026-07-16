@@ -1,26 +1,33 @@
 package com.chizberg.rewind.features.map.ui
 
+import android.content.Context
+import android.content.res.ColorStateList
 import android.graphics.Bitmap
+import android.graphics.BlurMaskFilter
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.PorterDuff
 import android.graphics.Rect
 import android.graphics.RectF
 import android.util.LruCache
+import androidx.core.content.ContextCompat
+import com.chizberg.rewind.R
 import com.chizberg.rewind.domain.RgbaColor
-import kotlin.math.acos
-import kotlin.math.cos
+import kotlin.math.ceil
 import kotlin.math.min
-import kotlin.math.sin
 
 /**
  * Builds and caches the map's marker **bitmaps**. Android divergence from iOS's `MKAnnotationView`
  * subclasses: instead of live views that recolour themselves, we draw immutable `Bitmap`s on a
- * `Canvas`. The caller decides how to present each: individual image pins and overlap-cluster
- * bubbles go through the Compose `Clustering` layer as `Image`s (cheap — no image loading); server
- * and local clusters become `BitmapDescriptor` markers.
+ * `Canvas`. The overlay then renders each as a plain `Image`; server-cluster thumbnails carry the
+ * loaded photo.
+ *
+ * The image pin is rendered from the [R.drawable.ic_image_pin] VectorDrawable — the iOS
+ * `imageAnnotationIcon.svg` circle+triangle merged into one path — tinted per-year and given a soft
+ * drop shadow. The cluster bubble and server disc are still drawn procedurally on a [Canvas].
  *
  * Static icons are keyed by their resolved colours (+ count, + pin rotation) and cached in an
  * [LruCache]. Keying by the **resolved ARGB** rather than a year bucket keeps colours exact (no
@@ -30,9 +37,22 @@ import kotlin.math.sin
  * Sizes mirror the iOS annotation views (20×26 pin, 60×60 cluster, matching paddings).
  */
 class AnnotationIconFactory(
+    private val context: Context,
     private val density: Float,
 ) {
     private val cache = LruCache<IconKey, Bitmap>(CACHE_ENTRIES)
+
+    /** Padding around the pin so its drop shadow isn't clipped at the bitmap edge. */
+    private val pinShadowPad = px(PIN_SHADOW_RADIUS_DP + PIN_SHADOW_DY_DP + 1f)
+
+    /**
+     * The single-path pin VectorDrawable ([R.drawable.ic_image_pin]), loaded once and mutated
+     * per draw (tint + bounds). Only touched from Compose's single-threaded draw path, so the
+     * shared mutable instance is safe.
+     */
+    private val pinDrawable by lazy {
+        checkNotNull(ContextCompat.getDrawable(context, R.drawable.ic_image_pin)).mutate()
+    }
 
     private enum class IconType { IMAGE, BUBBLE, SERVER_PLACEHOLDER }
 
@@ -45,10 +65,10 @@ class AnnotationIconFactory(
     )
 
     /**
-     * A tinted teardrop with a soft [shadow]-coloured drop shadow, rotated to [angleDeg] (degrees
-     * clockwise from north; 0 points up). Rotation is baked into the bitmap so the Compose
-     * `Clustering` content can render it as a plain, correctly-sized `Image`. Single continuous
-     * path (no circle+triangle seam), matching the shared pin outline on iOS.
+     * A tinted pin with a soft [shadow]-coloured drop shadow, rotated to [angleDeg] (degrees
+     * clockwise from north; 0 points up). Rotation is baked into the bitmap so the Compose overlay
+     * can render it as a plain, correctly-sized `Image`. The shape comes from the single-path
+     * [R.drawable.ic_image_pin] asset (the iOS `imageAnnotationIcon.svg`, merged to one path).
      */
     fun pinBitmap(
         tint: RgbaColor,
@@ -107,62 +127,56 @@ class AnnotationIconFactory(
         width: Float,
         height: Float,
     ): Pair<Bitmap, Canvas> {
-        val bmp = Bitmap.createBitmap(width.toInt(), height.toInt(), Bitmap.Config.ARGB_8888)
+        // ceil, not truncate: a shape drawn out to the full float [0,width]×[0,height] — e.g. a
+        // pill's rounded bottom/right — would otherwise lose its last sub-pixel to the smaller int
+        // bitmap and render a straight (clipped) edge there.
+        val bmp =
+            Bitmap.createBitmap(
+                ceil(width).toInt(),
+                ceil(height).toInt(),
+                Bitmap.Config.ARGB_8888,
+            )
         return bmp to Canvas(bmp)
     }
 
+    /**
+     * Renders the [pinDrawable] tinted to [tint] into a bitmap and casts a soft [shadow]-coloured
+     * drop shadow beneath it. The shadow is the blurred alpha of the pin silhouette (offset down),
+     * mirroring iOS's layer shadow on the same shape; padding ([pinShadowPad]) leaves room for it.
+     */
     private fun drawImagePin(
         tint: RgbaColor,
         shadow: RgbaColor,
     ): Bitmap {
-        val w = px(PIN_W_DP)
-        val h = px(PIN_H_DP)
-        val pad = px(PIN_SHADOW_RADIUS_DP + PIN_SHADOW_DY_DP + 1f)
-        val (bmp, canvas) = newBitmap(w + pad * 2, h + pad * 2)
+        val w = ceil(px(PIN_W_DP)).toInt()
+        val h = ceil(px(PIN_H_DP)).toInt()
+        val pad = ceil(pinShadowPad).toInt()
 
-        val path = teardropPath(w, h).apply { offset(pad, pad) }
-        val fill =
+        // The tinted pin silhouette, drawn from the single-path VectorDrawable.
+        val core = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        pinDrawable.setBounds(0, 0, w, h)
+        pinDrawable.setTintList(ColorStateList.valueOf(tint.argb))
+        pinDrawable.setTintMode(PorterDuff.Mode.SRC_IN)
+        pinDrawable.draw(Canvas(core))
+
+        // Compose the shadow (blurred silhouette alpha) then the pin, into a padded bitmap.
+        val (bmp, canvas) = newBitmap((w + pad * 2).toFloat(), (h + pad * 2).toFloat())
+        val blur =
             Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = tint.argb
-                style = Paint.Style.FILL
-                setShadowLayer(
-                    px(PIN_SHADOW_RADIUS_DP),
-                    0f,
-                    px(PIN_SHADOW_DY_DP),
-                    shadow.copy(alpha = PIN_SHADOW_ALPHA).argb,
-                )
+                maskFilter = BlurMaskFilter(px(PIN_SHADOW_RADIUS_DP), BlurMaskFilter.Blur.NORMAL)
             }
-        canvas.drawPath(path, fill)
+        val offset = IntArray(2)
+        val shadowMask = core.extractAlpha(blur, offset)
+        val shadowPaint = Paint().apply { color = shadow.copy(alpha = PIN_SHADOW_ALPHA).argb }
+        canvas.drawBitmap(
+            shadowMask,
+            (pad + offset[0]).toFloat(),
+            pad + offset[1] + px(PIN_SHADOW_DY_DP),
+            shadowPaint,
+        )
+        canvas.drawBitmap(core, pad.toFloat(), pad.toFloat(), null)
+        shadowMask.recycle()
         return bmp
-    }
-
-    /**
-     * A single closed teardrop pointing up, filling `[0,w] × [0,h]`: a radius-`w/2` disc at the
-     * bottom, its top pulled to an apex at `(w/2, 0)` along the two tangent lines from the apex.
-     * The tangents meet the arc smoothly, so there is no circle/triangle seam.
-     */
-    private fun teardropPath(
-        w: Float,
-        h: Float,
-    ): Path {
-        val r = w / 2f
-        val cx = w / 2f
-        val cy = h - r
-        val beta = acos(r / cy) // half-angle subtended by the tangent points at the apex
-        val betaDeg = Math.toDegrees(beta.toDouble()).toFloat()
-        val tx = r * sin(beta)
-        val ty = r * cos(beta)
-        return Path().apply {
-            moveTo(cx, 0f) // apex
-            lineTo(cx - tx, cy - ty) // left tangent point
-            arcTo(
-                RectF(cx - r, cy - r, cx + r, cy + r),
-                TOP_ANGLE_DEG - betaDeg, // start at the left tangent point
-                -(FULL_CIRCLE_DEG - 2f * betaDeg), // sweep the long way round the bottom
-                false,
-            )
-            close() // right tangent point back to the apex
-        }
     }
 
     private fun drawPill(
@@ -288,8 +302,6 @@ class AnnotationIconFactory(
     private companion object {
         const val CACHE_ENTRIES = 256
         const val COLOR_MAX = 255.0
-        const val TOP_ANGLE_DEG = 270f
-        const val FULL_CIRCLE_DEG = 360f
 
         const val PIN_W_DP = 20f
         const val PIN_H_DP = 26f

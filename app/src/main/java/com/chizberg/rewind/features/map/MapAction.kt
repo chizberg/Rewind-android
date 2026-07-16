@@ -14,10 +14,15 @@ import com.chizberg.rewind.network.AnnotationLoadingParams
 sealed interface MapAction {
     sealed interface External : MapAction {
         sealed interface Map : External {
-            /** Camera settled on a new region; [zoom] is the rounded camera zoom (see Zoom.kt). */
+            /**
+             * Camera settled on a new region. [zoom] is the rounded camera zoom (see Zoom.kt);
+             * [cameraZoom] is the raw continuous zoom, kept so the clustering cell stays constant
+             * within a rounded-zoom bucket (a sub-bucket zoom must not shift the grid).
+             */
             data class RegionChanged(
                 val region: Region,
                 val zoom: Int,
+                val cameraZoom: Float,
             ) : Map
         }
 
@@ -32,6 +37,7 @@ sealed interface MapAction {
         data class RegionChanged(
             val region: Region,
             val zoom: Int,
+            val cameraZoom: Float,
         ) : Internal
 
         data object LoadAnnotations : Internal

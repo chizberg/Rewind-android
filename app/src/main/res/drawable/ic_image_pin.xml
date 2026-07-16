@@ -1,0 +1,19 @@
+<!--
+  Individual-image map pin, ported from iOS `imageAnnotation.imageset/imageAnnotationIcon.svg`.
+  The source SVG is two overlapping white shapes (a r=10 disc centred at (10,16) and a rounded
+  triangle whose apex points up); here they are merged into a SINGLE continuous path — the union
+  outline — so there is no two-subpath seam. Appearance is unchanged from the iOS asset.
+
+  Outline: rounded apex, down the right side to where it meets the disc at (15.6149, 7.7252), the
+  major arc the long way round the bottom to the mirror point (4.3851, 7.7252), then closed up the
+  left side. White fill so it can be tinted per-year (SRC_IN) at render time.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="26dp"
+    android:viewportWidth="20"
+    android:viewportHeight="26">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M8.26795,1 C9.03775,-0.333332 10.9623,-0.333334 11.7321,0.999999 L15.6149,7.7252 A10,10 0 1,1 4.3851,7.7252 Z" />
+</vector>

@@ -44,7 +44,8 @@ fun makeMapModel(
     ) { state, action, effect, asyncEffect ->
         when (action) {
             is MapAction.External.Map.RegionChanged -> {
-                val internal = MapAction.Internal.RegionChanged(action.region, action.zoom)
+                val internal =
+                    MapAction.Internal.RegionChanged(action.region, action.zoom, action.cameraZoom)
                 asyncEffect(
                     AsyncEffect.debounced(
                         id = DebouncedActionId.RegionChanged,
@@ -80,7 +81,11 @@ fun makeMapModel(
                         anotherAction = MapAction.Internal.UpdatePreviews,
                     ),
                 )
-                state.copy(region = action.region, zoom = action.zoom)
+                state.copy(
+                    region = action.region,
+                    zoom = action.zoom,
+                    cameraZoom = action.cameraZoom,
+                )
             }
 
             MapAction.Internal.LoadAnnotations -> {

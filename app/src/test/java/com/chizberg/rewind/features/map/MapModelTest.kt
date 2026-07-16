@@ -51,7 +51,13 @@ class MapModelTest {
                 makeMapModel(remote.asRemote, onLoadFailed = {}, scope = scope, now = { 0.0 })
 
             repeat(5) { i ->
-                model(MapAction.External.Map.RegionChanged(region(latOffset = i * 0.01), zoom = 13))
+                model(
+                    MapAction.External.Map.RegionChanged(
+                        region(latOffset = i * 0.01),
+                        zoom = 13,
+                        cameraZoom = 13f,
+                    ),
+                )
             }
             advanceUntilIdle()
 
@@ -75,12 +81,24 @@ class MapModelTest {
                     now = { 0.0 },
                 )
 
-            model(MapAction.External.Map.RegionChanged(region(latOffset = 0.0), zoom = 13))
+            model(
+                MapAction.External.Map.RegionChanged(
+                    region(latOffset = 0.0),
+                    zoom = 13,
+                    cameraZoom = 13f,
+                ),
+            )
             advanceTimeBy(150.milliseconds)
             runCurrent()
             assertEquals(1, remote.loadCount) // first load started, hanging
 
-            model(MapAction.External.Map.RegionChanged(region(latOffset = 5.0), zoom = 13))
+            model(
+                MapAction.External.Map.RegionChanged(
+                    region(latOffset = 5.0),
+                    zoom = 13,
+                    cameraZoom = 13f,
+                ),
+            )
             advanceUntilIdle()
             assertEquals(2, remote.loadCount) // second load cancelled the first
 
@@ -108,7 +126,13 @@ class MapModelTest {
             val imagesA = (0 until 12).map { img(it + 1, cellLat = it, cellLon = 0, zoom = 10) }
             val clusterA = serverCluster(41)
             remote.response = imagesA to listOf(clusterA)
-            model(MapAction.External.Map.RegionChanged(region(zoom = 10), zoom = 10))
+            model(
+                MapAction.External.Map.RegionChanged(
+                    region(zoom = 10),
+                    zoom = 10,
+                    cameraZoom = 10f,
+                ),
+            )
             advanceUntilIdle()
             assertEquals(imagesA.toSet(), model.state.value.imageValues)
             assertEquals(listOf(clusterA), model.state.value.clusterValues)
@@ -123,7 +147,13 @@ class MapModelTest {
             val clusterB = serverCluster(42)
             remote.gateNextCall = true
             remote.response = imagesB to listOf(clusterB)
-            model(MapAction.External.Map.RegionChanged(region(zoom = 12), zoom = 12))
+            model(
+                MapAction.External.Map.RegionChanged(
+                    region(zoom = 12),
+                    zoom = 12,
+                    cameraZoom = 12f,
+                ),
+            )
             advanceUntilIdle()
             assertEquals(2, remote.loadCount)
             assertTrue(model.state.value.isLoading)
@@ -147,7 +177,11 @@ class MapModelTest {
                 }
             remote.response = imagesC to emptyList()
             model(
-                MapAction.External.Map.RegionChanged(region(zoom = 12, latOffset = 1.0), zoom = 12),
+                MapAction.External.Map.RegionChanged(
+                    region(zoom = 12, latOffset = 1.0),
+                    zoom = 12,
+                    cameraZoom = 12f,
+                ),
             )
             advanceUntilIdle()
             assertEquals((imagesB + imagesC).toSet(), model.state.value.imageValues)
@@ -175,7 +209,13 @@ class MapModelTest {
             remote.response =
                 (listOf(survivor) + (2..3).map { img(it, cellLat = it, cellLon = 0, zoom = 10) }) to
                 listOf(serverCluster(41))
-            model(MapAction.External.Map.RegionChanged(region(zoom = 10), zoom = 10))
+            model(
+                MapAction.External.Map.RegionChanged(
+                    region(zoom = 10),
+                    zoom = 10,
+                    cameraZoom = 10f,
+                ),
+            )
             advanceUntilIdle()
             assertTrue(
                 model.state.value.annotations

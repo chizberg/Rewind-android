@@ -3,10 +3,16 @@ package com.chizberg.rewind.features.map
 import com.chizberg.rewind.domain.ModelCluster
 import com.chizberg.rewind.domain.ModelImage
 import com.chizberg.rewind.domain.ModelLocalCluster
+import com.chizberg.rewind.domain.zoom
 import com.chizberg.rewind.network.AnnotationLoadingParams
 import kotlin.math.floor
+import kotlin.math.pow
 
-private const val LOCAL_CLUSTER_MIN_COUNT = 5
+// Images in one grid cell needed to collapse them into a local-cluster bubble. Deliberately more
+// aggressive than iOS (which uses 5 AND runs MapKit's clusteringIdentifier overlap layer): the
+// Android annotation overlay has no overlap layer, so the grid absorbs that role — any cell past a
+// single image clusters. Accepted divergence.
+private const val LOCAL_CLUSTER_MIN_COUNT = 2
 private const val CLUSTERING_CELL_RATIO = 8.0
 
 /**
@@ -24,12 +30,21 @@ fun makeDiffAfterReceived(
     val last = state.lastLoadedParams
     val shouldClear = last != null && (last.zoom != params.zoom || last.filters != params.filters)
 
-    // Cell size = 1/8 of the *visible* longitude span (iOS uses `delta(zoom, mapSize)/8`, whose
-    // screen adjustment makes `delta` reconstruct the visible span). Android reads the real span
-    // directly, so we skip iOS's zoom<->span round-trip. longitudeDelta (not latitude) because in
-    // web-mercator it's constant at a given zoom regardless of pan — a stable grid, so a same-zoom
-    // pan's incremental merge never desyncs.
-    val cellSize = state.region.span.longitudeDelta / CLUSTERING_CELL_RATIO
+    // The grid cell must be FIXED for the whole rounded-zoom bucket, exactly like iOS's
+    // `delta(zoom, mapSize)` (a function of the rounded zoom, not the live span). We hold it in
+    // state and recompute only on a bucket change (or the first load): recomputing from the
+    // continuously-varying camera span every load makes the cell size — and, since it's part of the
+    // cell key, every cell — jitter, so the additive (same-zoom) path re-adds all annotations and
+    // they duplicate. On recompute we snap the current span to the integer zoom via
+    // `2^(cameraZoom - roundedZoom)` (= the span at that integer zoom, iOS's `delta`).
+    val cellSpan =
+        if (shouldClear || state.clusteringCellSpan <= 0.0) {
+            val roundedZoom = zoom(state.cameraZoom)
+            state.region.span.longitudeDelta * 2.0.pow((state.cameraZoom - roundedZoom).toDouble())
+        } else {
+            state.clusteringCellSpan
+        }
+    val cellSize = cellSpan / CLUSTERING_CELL_RATIO
 
     val toAdd = mutableListOf<AnnotationValue>()
     val toRemove = mutableListOf<AnnotationValue>()
@@ -57,7 +72,12 @@ fun makeDiffAfterReceived(
         }
 
     return ClusteringDiff(
-        state = state.copy(clusters = newClusters, clusteredImages = newClusteredImages),
+        state =
+            state.copy(
+                clusters = newClusters,
+                clusteredImages = newClusteredImages,
+                clusteringCellSpan = cellSpan,
+            ),
         toAdd = toAdd,
         toRemove = toRemove,
     )
