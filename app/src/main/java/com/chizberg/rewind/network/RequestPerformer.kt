@@ -1,6 +1,8 @@
 package com.chizberg.rewind.network
 
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.OkHttpClient
@@ -25,17 +27,20 @@ class RequestPerformer(
 ) {
     // Broad catches are intentional: any parse/transport failure is wrapped into NetworkError,
     // mirroring iOS `catch { throw NetworkError.parsingFailure(error) }`. Cancellation is rethrown.
+    // Runs on Default: callers live on Main.immediate (the reducer scope), and byBounds bodies are
+    // multi-megabyte — decoding + parsing them on the main thread would eat whole frames.
     @Suppress("TooGenericExceptionCaught")
-    suspend fun <Response> perform(request: Request<Response>): Response {
-        val bytes = fetch(request.makeRequest())
-        return try {
-            request.parseResult(bytes)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            throw NetworkError.ParsingFailure(e)
+    suspend fun <Response> perform(request: Request<Response>): Response =
+        withContext(Dispatchers.Default) {
+            val bytes = fetch(request.makeRequest())
+            try {
+                request.parseResult(bytes)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                throw NetworkError.ParsingFailure(e)
+            }
         }
-    }
 
     @Suppress("TooGenericExceptionCaught")
     private suspend fun fetch(request: OkHttpRequest): ByteArray =

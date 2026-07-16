@@ -15,6 +15,28 @@ import kotlin.math.pow
 private const val LOCAL_CLUSTER_MIN_COUNT = 2
 private const val CLUSTERING_CELL_RATIO = 8.0
 
+// Annotations survive this multiple of the visible span around the camera before eviction.
+// Android divergence: iOS keeps every annotation and lets MapKit cull rendering; our overlay
+// renders from state, so a long same-zoom pan must not accumulate unbounded state (the additive
+// path below never removes anything).
+private const val EVICTION_SPAN_MULTIPLIER = 3.0
+
+/**
+ * Drops server clusters and grid cells whose coordinate has left [MapState.region] ×
+ * [EVICTION_SPAN_MULTIPLIER]. Applied on every accepted region change, after the region lands in
+ * state; evicted annotations are far off-screen, so nothing visible changes.
+ */
+fun MapState.evictingFarAnnotations(): MapState {
+    val keep = region.expanded(EVICTION_SPAN_MULTIPLIER)
+    val keptClusters = clusters.filterTo(mutableSetOf()) { keep.contains(it.coordinate) }
+    val keptCells = clusteredImages.filterKeys { keep.contains(it.coordinate) }
+    return if (keptClusters.size == clusters.size && keptCells.size == clusteredImages.size) {
+        this
+    } else {
+        copy(clusters = keptClusters, clusteredImages = keptCells)
+    }
+}
+
 /**
  * Folds a received `(images, clusters)` batch into [state]. Line-for-line port of iOS
  * `makeDiffAfterReceived`. On a zoom/filter change everything is rebuilt from scratch; a same-zoom

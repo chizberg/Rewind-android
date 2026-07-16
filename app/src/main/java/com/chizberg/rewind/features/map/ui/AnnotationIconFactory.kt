@@ -6,7 +6,6 @@ import android.graphics.Bitmap
 import android.graphics.BlurMaskFilter
 import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PorterDuff
@@ -14,8 +13,10 @@ import android.graphics.Rect
 import android.graphics.RectF
 import android.util.LruCache
 import androidx.core.content.ContextCompat
+import androidx.tracing.trace
 import com.chizberg.rewind.R
 import com.chizberg.rewind.domain.RgbaColor
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.ceil
 import kotlin.math.min
 
@@ -29,10 +30,21 @@ import kotlin.math.min
  * `imageAnnotationIcon.svg` circle+triangle merged into one path — tinted per-year and given a soft
  * drop shadow. The cluster bubble and server disc are still drawn procedurally on a [Canvas].
  *
- * Static icons are keyed by their resolved colours (+ count, + pin rotation) and cached in an
- * [LruCache]. Keying by the **resolved ARGB** rather than a year bucket keeps colours exact (no
- * visible quantization) while still bounding entries to the number of distinct on-screen tints.
+ * Static icons are keyed by their resolved colours (+ count) and cached in an [LruCache]. Keying
+ * by the **resolved ARGB** rather than a year bucket keeps colours exact (no visible quantization)
+ * while still bounding entries to the number of distinct on-screen tints. Pin direction is NOT part
+ * of the key: rotation is the renderer's job (a free `graphicsLayer` transform), so one upright pin
+ * per tint serves every angle instead of multiplying the cache ×360.
  * Server-cluster thumbnails are per-image and not cached here (Coil owns the image cache).
+ *
+ * Thread-safe: the overlay rasterizes icons on background threads (a load landing on camera idle
+ * composes dozens of markers at once — drawing their icons on the main thread stuttered the
+ * appear animation). [LruCache] is internally synchronized; misses are single-flight per key (a
+ * dense wave asks for the same icon from many markers — only the first caller draws); the
+ * mutated-per-draw pin drawable is per-thread, so distinct pins rasterize in parallel.
+ *
+ * Every raster emits a systrace section (`Rewind:pinRaster` / `Rewind:pillRaster` /
+ * `Rewind:clusterRaster`), so a Perfetto capture attributes icon CPU per type and thread.
  *
  * Sizes mirror the iOS annotation views (20×26 pin, 60×60 cluster, matching paddings).
  */
@@ -46,13 +58,14 @@ class AnnotationIconFactory(
     private val pinShadowPad = px(PIN_SHADOW_RADIUS_DP + PIN_SHADOW_DY_DP + 1f)
 
     /**
-     * The single-path pin VectorDrawable ([R.drawable.ic_image_pin]), loaded once and mutated
-     * per draw (tint + bounds). Only touched from Compose's single-threaded draw path, so the
-     * shared mutable instance is safe.
+     * The single-path pin VectorDrawable ([R.drawable.ic_image_pin]), one lazily-inflated
+     * instance per rasterizing thread: it is mutated per draw (tint + bounds), and a single
+     * shared instance would serialize every pin draw of a dense wave behind one lock.
      */
-    private val pinDrawable by lazy {
-        checkNotNull(ContextCompat.getDrawable(context, R.drawable.ic_image_pin)).mutate()
-    }
+    private val pinDrawable =
+        ThreadLocal.withInitial {
+            checkNotNull(ContextCompat.getDrawable(context, R.drawable.ic_image_pin)).mutate()
+        }
 
     private enum class IconType { IMAGE, BUBBLE, SERVER_PLACEHOLDER }
 
@@ -61,26 +74,21 @@ class AnnotationIconFactory(
         val tintArgb: Int,
         val foregroundArgb: Int,
         val count: Int,
-        val angleDeg: Int,
     )
 
     /**
-     * A tinted pin with a soft [shadow]-coloured drop shadow, rotated to [angleDeg] (degrees
-     * clockwise from north; 0 points up). Rotation is baked into the bitmap so the Compose overlay
-     * can render it as a plain, correctly-sized `Image`. The shape comes from the single-path
-     * [R.drawable.ic_image_pin] asset (the iOS `imageAnnotationIcon.svg`, merged to one path).
+     * A tinted pin with a soft [shadow]-coloured drop shadow, pointing up. Direction rotation is
+     * applied by the renderer (`Modifier.rotate` on the GPU layer), never baked in here. The shape
+     * comes from the single-path [R.drawable.ic_image_pin] asset (the iOS `imageAnnotationIcon.svg`,
+     * merged to one path).
      */
     fun pinBitmap(
         tint: RgbaColor,
         shadow: RgbaColor,
-        angleDeg: Float,
-    ): Bitmap {
-        val bucket = angleDeg.toInt()
-        return cached(IconKey(IconType.IMAGE, tint.argb, shadow.argb, 0, bucket)) {
-            val upright = drawImagePin(tint, shadow)
-            if (bucket == 0) upright else upright.rotated(bucket.toFloat())
+    ): Bitmap =
+        cached(IconKey(IconType.IMAGE, tint.argb, shadow.argb, 0)) {
+            drawImagePin(tint, shadow)
         }
-    }
 
     /** A tinted capsule carrying a [count] — used for both local clusters and overlap bubbles. */
     fun bubbleBitmap(
@@ -88,7 +96,7 @@ class AnnotationIconFactory(
         foreground: RgbaColor,
         count: Int,
     ): Bitmap =
-        cached(IconKey(IconType.BUBBLE, tint.argb, foreground.argb, count, 0)) {
+        cached(IconKey(IconType.BUBBLE, tint.argb, foreground.argb, count)) {
             drawPill(count.toString(), tint, foreground, PILL_TEXT_DP, PILL_PAD_H_DP, PILL_PAD_V_DP)
         }
 
@@ -104,20 +112,55 @@ class AnnotationIconFactory(
         count: Int,
     ): Bitmap =
         if (thumbnail == null) {
-            cached(IconKey(IconType.SERVER_PLACEHOLDER, tint.argb, foreground.argb, count, 0)) {
+            cached(IconKey(IconType.SERVER_PLACEHOLDER, tint.argb, foreground.argb, count)) {
                 drawServerCluster(null, tint, foreground, count)
             }
         } else {
             drawServerCluster(thumbnail, tint, foreground, count)
         }
 
+    // Cache peeks: a hit lets the overlay show the icon synchronously instead of spending a
+    // coroutine (and a blank frame) on async production; a miss falls back to drawing off-main.
+
+    /** The already-cached upright pin for the colours, or null. */
+    fun cachedPinBitmap(
+        tint: RgbaColor,
+        shadow: RgbaColor,
+    ): Bitmap? = cache.get(IconKey(IconType.IMAGE, tint.argb, shadow.argb, 0))
+
+    /** The already-cached count capsule, or null. */
+    fun cachedBubbleBitmap(
+        tint: RgbaColor,
+        foreground: RgbaColor,
+        count: Int,
+    ): Bitmap? = cache.get(IconKey(IconType.BUBBLE, tint.argb, foreground.argb, count))
+
+    /** The already-cached server-cluster placeholder (no thumbnail), or null. */
+    fun cachedServerClusterPlaceholder(
+        tint: RgbaColor,
+        foreground: RgbaColor,
+        count: Int,
+    ): Bitmap? = cache.get(IconKey(IconType.SERVER_PLACEHOLDER, tint.argb, foreground.argb, count))
+
+    /** Per-key draw locks for [cached]'s single-flight; entries are dropped once drawn. */
+    private val inFlight = ConcurrentHashMap<IconKey, Any>()
+
     private fun cached(
         key: IconKey,
         draw: () -> Bitmap,
-    ): Bitmap = cache.get(key) ?: draw().also { cache.put(key, it) }
-
-    private fun Bitmap.rotated(degrees: Float): Bitmap =
-        Bitmap.createBitmap(this, 0, 0, width, height, Matrix().apply { postRotate(degrees) }, true)
+    ): Bitmap {
+        cache.get(key)?.let { return it }
+        // Single-flight per key: in a dense appearance wave many markers miss on the same icon
+        // simultaneously — only the first caller draws, the rest wait briefly and read the cache.
+        val lock = inFlight.computeIfAbsent(key) { Any() }
+        synchronized(lock) {
+            cache.get(key)?.let { return it }
+            return draw().also {
+                cache.put(key, it)
+                inFlight.remove(key)
+            }
+        }
+    }
 
     // region drawing
 
@@ -147,37 +190,40 @@ class AnnotationIconFactory(
     private fun drawImagePin(
         tint: RgbaColor,
         shadow: RgbaColor,
-    ): Bitmap {
-        val w = ceil(px(PIN_W_DP)).toInt()
-        val h = ceil(px(PIN_H_DP)).toInt()
-        val pad = ceil(pinShadowPad).toInt()
+    ): Bitmap =
+        trace("Rewind:pinRaster") {
+            val w = ceil(px(PIN_W_DP)).toInt()
+            val h = ceil(px(PIN_H_DP)).toInt()
+            val pad = ceil(pinShadowPad).toInt()
 
-        // The tinted pin silhouette, drawn from the single-path VectorDrawable.
-        val core = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-        pinDrawable.setBounds(0, 0, w, h)
-        pinDrawable.setTintList(ColorStateList.valueOf(tint.argb))
-        pinDrawable.setTintMode(PorterDuff.Mode.SRC_IN)
-        pinDrawable.draw(Canvas(core))
+            // The tinted pin silhouette, drawn from this thread's own VectorDrawable instance.
+            val core = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            val pin = checkNotNull(pinDrawable.get())
+            pin.setBounds(0, 0, w, h)
+            pin.setTintList(ColorStateList.valueOf(tint.argb))
+            pin.setTintMode(PorterDuff.Mode.SRC_IN)
+            pin.draw(Canvas(core))
 
-        // Compose the shadow (blurred silhouette alpha) then the pin, into a padded bitmap.
-        val (bmp, canvas) = newBitmap((w + pad * 2).toFloat(), (h + pad * 2).toFloat())
-        val blur =
-            Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                maskFilter = BlurMaskFilter(px(PIN_SHADOW_RADIUS_DP), BlurMaskFilter.Blur.NORMAL)
-            }
-        val offset = IntArray(2)
-        val shadowMask = core.extractAlpha(blur, offset)
-        val shadowPaint = Paint().apply { color = shadow.copy(alpha = PIN_SHADOW_ALPHA).argb }
-        canvas.drawBitmap(
-            shadowMask,
-            (pad + offset[0]).toFloat(),
-            pad + offset[1] + px(PIN_SHADOW_DY_DP),
-            shadowPaint,
-        )
-        canvas.drawBitmap(core, pad.toFloat(), pad.toFloat(), null)
-        shadowMask.recycle()
-        return bmp
-    }
+            // Compose the shadow (blurred silhouette alpha) then the pin, into a padded bitmap.
+            val (bmp, canvas) = newBitmap((w + pad * 2).toFloat(), (h + pad * 2).toFloat())
+            val blur =
+                Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    maskFilter =
+                        BlurMaskFilter(px(PIN_SHADOW_RADIUS_DP), BlurMaskFilter.Blur.NORMAL)
+                }
+            val offset = IntArray(2)
+            val shadowMask = core.extractAlpha(blur, offset)
+            val shadowPaint = Paint().apply { color = shadow.copy(alpha = PIN_SHADOW_ALPHA).argb }
+            canvas.drawBitmap(
+                shadowMask,
+                (pad + offset[0]).toFloat(),
+                pad + offset[1] + px(PIN_SHADOW_DY_DP),
+                shadowPaint,
+            )
+            canvas.drawBitmap(core, pad.toFloat(), pad.toFloat(), null)
+            shadowMask.recycle()
+            bmp
+        }
 
     private fun drawPill(
         text: String,
@@ -186,83 +232,85 @@ class AnnotationIconFactory(
         textDp: Float,
         padHDp: Float,
         padVDp: Float,
-    ): Bitmap {
-        val textPaint = countTextPaint(foreground, textDp)
-        val fm = textPaint.fontMetrics
-        val w = textPaint.measureText(text) + px(padHDp) * 2f
-        val h = (fm.descent - fm.ascent) + px(padVDp) * 2f
-        val (bmp, canvas) = newBitmap(w, h)
-        val radius = min(w, h) / 2f
-        canvas.drawRoundRect(
-            RectF(0f, 0f, w, h),
-            radius,
-            radius,
-            Paint(Paint.ANTI_ALIAS_FLAG).apply { color = background.argb },
-        )
-        canvas.drawText(text, w / 2f, textBaseline(textPaint, h / 2f), textPaint)
-        return bmp
-    }
+    ): Bitmap =
+        trace("Rewind:pillRaster") {
+            val textPaint = countTextPaint(foreground, textDp)
+            val fm = textPaint.fontMetrics
+            val w = textPaint.measureText(text) + px(padHDp) * 2f
+            val h = (fm.descent - fm.ascent) + px(padVDp) * 2f
+            val (bmp, canvas) = newBitmap(w, h)
+            val radius = min(w, h) / 2f
+            canvas.drawRoundRect(
+                RectF(0f, 0f, w, h),
+                radius,
+                radius,
+                Paint(Paint.ANTI_ALIAS_FLAG).apply { color = background.argb },
+            )
+            canvas.drawText(text, w / 2f, textBaseline(textPaint, h / 2f), textPaint)
+            bmp
+        }
 
     private fun drawServerCluster(
         thumbnail: Bitmap?,
         tint: RgbaColor,
         foreground: RgbaColor,
         count: Int,
-    ): Bitmap {
-        val size = px(SERVER_CLUSTER_DP)
-        val (bmp, canvas) = newBitmap(size, size)
-        val center = size / 2f
-        val ring = px(THUMBNAIL_RING_DP)
-        val radius = center - ring / 2f
+    ): Bitmap =
+        trace("Rewind:clusterRaster") {
+            val size = px(SERVER_CLUSTER_DP)
+            val (bmp, canvas) = newBitmap(size, size)
+            val center = size / 2f
+            val ring = px(THUMBNAIL_RING_DP)
+            val radius = center - ring / 2f
 
-        // Translucent tint fill — the placeholder body, and a wash behind the image edges.
-        canvas.drawCircle(
-            center,
-            center,
-            radius,
-            Paint(
-                Paint.ANTI_ALIAS_FLAG,
-            ).apply { color = tint.copy(alpha = PLACEHOLDER_ALPHA).argb },
-        )
-
-        if (thumbnail != null) {
-            val clip = Path().apply { addCircle(center, center, radius, Path.Direction.CW) }
-            canvas.save()
-            canvas.clipPath(clip)
-            canvas.drawBitmap(
-                thumbnail,
-                centerCropSquare(thumbnail),
-                RectF(center - radius, center - radius, center + radius, center + radius),
-                Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG),
+            // Translucent tint fill — the placeholder body, and a wash behind the image edges.
+            canvas.drawCircle(
+                center,
+                center,
+                radius,
+                Paint(
+                    Paint.ANTI_ALIAS_FLAG,
+                ).apply { color = tint.copy(alpha = PLACEHOLDER_ALPHA).argb },
             )
-            canvas.restore()
-        }
 
-        canvas.drawCircle(
-            center,
-            center,
-            radius,
-            Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = tint.argb
-                style = Paint.Style.STROKE
-                strokeWidth = ring
-            },
-        )
+            if (thumbnail != null) {
+                val clip = Path().apply { addCircle(center, center, radius, Path.Direction.CW) }
+                canvas.save()
+                canvas.clipPath(clip)
+                canvas.drawBitmap(
+                    thumbnail,
+                    centerCropSquare(thumbnail),
+                    RectF(center - radius, center - radius, center + radius, center + radius),
+                    Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG),
+                )
+                canvas.restore()
+            }
 
-        val badge =
-            drawPill(
-                count.toString(),
-                tint,
-                foreground,
-                BADGE_TEXT_DP,
-                BADGE_PAD_H_DP,
-                BADGE_PAD_V_DP,
+            canvas.drawCircle(
+                center,
+                center,
+                radius,
+                Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = tint.argb
+                    style = Paint.Style.STROKE
+                    strokeWidth = ring
+                },
             )
-        if (badge.width <= size) {
-            canvas.drawBitmap(badge, size - badge.width, size - badge.height, null)
+
+            val badge =
+                drawPill(
+                    count.toString(),
+                    tint,
+                    foreground,
+                    BADGE_TEXT_DP,
+                    BADGE_PAD_H_DP,
+                    BADGE_PAD_V_DP,
+                )
+            if (badge.width <= size) {
+                canvas.drawBitmap(badge, size - badge.width, size - badge.height, null)
+            }
+            bmp
         }
-        return bmp
-    }
 
     private fun countTextPaint(
         foreground: RgbaColor,

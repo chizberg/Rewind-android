@@ -408,6 +408,38 @@ class LocalClusteringTest {
         assertTrue(r.toRemove.clusters.isEmpty())
     }
 
+    // MARK: Eviction (Android divergence: state stays bounded during long same-zoom pans)
+
+    @Test
+    fun evictionDropsOnlyAnnotationsOutsidePaddedRegion() {
+        var state = emptyState()
+        val p = params(zoom = 13)
+        // Near: a cluster in cell (0,0) — coordinate ≈ (0.003°, 0.003°). Far: an individual in
+        // cell (3000, 3000) — coordinate ≈ (16.5°, 16.5°), outside 3× a 2°-span region (±3°).
+        val near = cellImages(2, cellLat = 0, cellLon = 0, from = 0, zoom = 13)
+        val far = cellImages(1, cellLat = 3000, cellLon = 3000, from = 100, zoom = 13)
+        val nearCluster = serverCluster(1) // coordinate (1°, 1°) — inside ±3°
+        val farCluster = serverCluster(10) // coordinate (10°, 10°) — outside
+        state =
+            receive(state, near + far, clusters = listOf(nearCluster, farCluster), params = p).state
+
+        val evicted =
+            state
+                .copy(region = Region(Coordinate.zero, Span(2.0, 2.0)))
+                .evictingFarAnnotations()
+
+        assertEquals(setOf(nearCluster), evicted.clusters)
+        assertEquals(1, evicted.clusteredImages.size)
+        assertEquals(
+            2,
+            evicted.clusteredImages.values
+                .first()
+                .right
+                ?.images
+                ?.size,
+        )
+    }
+
     // MARK: Edge cases
 
     @Test

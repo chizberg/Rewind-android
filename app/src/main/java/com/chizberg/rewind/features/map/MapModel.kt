@@ -81,11 +81,12 @@ fun makeMapModel(
                         anotherAction = MapAction.Internal.UpdatePreviews,
                     ),
                 )
-                state.copy(
-                    region = action.region,
-                    zoom = action.zoom,
-                    cameraZoom = action.cameraZoom,
-                )
+                state
+                    .copy(
+                        region = action.region,
+                        zoom = action.zoom,
+                        cameraZoom = action.cameraZoom,
+                    ).evictingFarAnnotations()
             }
 
             MapAction.Internal.LoadAnnotations -> {

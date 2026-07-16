@@ -92,6 +92,10 @@ dependencies {
     implementation(libs.play.services.maps)
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
+    // Systrace sections around the annotation icon pipeline ("Rewind:*" in a Perfetto capture);
+    // runtime-tracing additionally names every recomposition in Studio's System Trace.
+    implementation(libs.androidx.tracing.ktx)
+    debugImplementation(libs.androidx.compose.runtime.tracing)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.okhttp.mockwebserver)

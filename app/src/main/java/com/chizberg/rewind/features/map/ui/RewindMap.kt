@@ -83,18 +83,27 @@ fun RewindMap(modifier: Modifier = Modifier) {
             )
         }
     val state by mapModel.state.collectAsStateWithLifecycle()
+    // Materialized once per data change: `MapState.annotations` is a computed getter building a
+    // fresh list on every read, and state also emits for region/isLoading-only changes — the same
+    // cached instance lets the overlay skip those entirely.
+    val annotations =
+        remember(state.clusters, state.clusteredImages) { state.annotations }
 
     val density = LocalDensity.current.density
     val context = LocalContext.current
-    val icons = remember { AnnotationIconFactory(context, density) }
-    // Cluster thumbnails render at 60dp; decode to that (in px) instead of full resolution.
-    val thumbnailTargetPx = (SERVER_CLUSTER_DP * density).toInt()
-    val imageLoader =
+    // All icon rasterization and delivery machinery (Android-only, see AnnotationIconPipeline).
+    val iconPipeline =
         remember {
-            ImageLoader
-                .Builder(context)
-                .components { add(OkHttpNetworkFetcherFactory()) }
-                .build()
+            AnnotationIconPipeline(
+                icons = AnnotationIconFactory(context, density),
+                imageLoader =
+                    ImageLoader
+                        .Builder(context)
+                        .components { add(OkHttpNetworkFetcherFactory()) }
+                        .build(),
+                // Cluster thumbnails render at 60dp; decode to that (in px), not full resolution.
+                thumbnailTargetPx = (SERVER_CLUSTER_DP * density).toInt(),
+            )
         }
     val maxRange = state.filters.imageKind.maxRange
 
@@ -136,13 +145,12 @@ fun RewindMap(modifier: Modifier = Modifier) {
         )
         // Annotations sit above the map surface, projected onto it (see AnnotationOverlay).
         AnnotationOverlay(
-            annotations = state.annotations,
+            annotations = annotations,
+            region = state.region,
             cameraPositionState = cameraPositionState,
             scheme = CurrentScheme,
             maxRange = maxRange,
-            icons = icons,
-            imageLoader = imageLoader,
-            thumbnailTargetPx = thumbnailTargetPx,
+            iconPipeline = iconPipeline,
         )
     }
 }

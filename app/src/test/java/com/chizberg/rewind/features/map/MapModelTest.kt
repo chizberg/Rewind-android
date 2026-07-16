@@ -27,6 +27,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Ignore
 import org.junit.Test
+import kotlin.math.floor
 import kotlin.math.pow
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -122,8 +123,19 @@ class MapModelTest {
             val model =
                 makeMapModel(remote.asRemote, onLoadFailed = {}, scope = scope, now = { 0.0 })
 
-            // 12 images in distinct cells (each below the local-cluster threshold) + a server cluster.
-            val imagesA = (0 until 12).map { img(it + 1, cellLat = it, cellLon = 0, zoom = 10) }
+            // 4 images in distinct cells around the region center (each below the local-cluster
+            // threshold) + a server cluster. Geography is coherent with the regions below: every
+            // annotation asserted to survive a region change must sit inside that region's
+            // eviction keep-window (×3 span) — the reducer now evicts far-off state.
+            val imagesA =
+                listOf(0 to 0, 0 to -1, -1 to 0, -1 to -1).mapIndexed { i, (dLat, dLon) ->
+                    img(
+                        i + 1,
+                        cellLat = centerCellLat(10) + dLat,
+                        cellLon = centerCellLon(10) + dLon,
+                        zoom = 10,
+                    )
+                }
             val clusterA = serverCluster(41)
             remote.response = imagesA to listOf(clusterA)
             model(
@@ -143,7 +155,15 @@ class MapModelTest {
             )
 
             // Zoom in; while the response is gated, annotations stay intact.
-            val imagesB = (0 until 3).map { img(it + 100, cellLat = it, cellLon = 0, zoom = 12) }
+            val imagesB =
+                (0 until 3).map {
+                    img(
+                        it + 100,
+                        cellLat = centerCellLat(12) + it,
+                        cellLon = centerCellLon(12),
+                        zoom = 12,
+                    )
+                }
             val clusterB = serverCluster(42)
             remote.gateNextCall = true
             remote.response = imagesB to listOf(clusterB)
@@ -165,20 +185,20 @@ class MapModelTest {
             assertEquals(imagesB.toSet(), model.state.value.imageValues)
             assertEquals(listOf(clusterB), model.state.value.clusterValues)
 
-            // Pan at the same zoom: nothing is removed, new images append.
+            // Pan half a viewport at the same zoom: nothing visible is removed, new images append.
             val imagesC =
                 (0 until 2).map {
                     img(
                         it + 200,
-                        cellLat = it + 10,
-                        cellLon = 5,
+                        cellLat = centerCellLat(12) + 4 + it,
+                        cellLon = centerCellLon(12) + 2,
                         zoom = 12,
                     )
                 }
             remote.response = imagesC to emptyList()
             model(
                 MapAction.External.Map.RegionChanged(
-                    region(zoom = 12, latOffset = 1.0),
+                    region(zoom = 12, latOffset = spanForZoom(12) / 2),
                     zoom = 12,
                     cameraZoom = 12f,
                 ),
@@ -317,6 +337,12 @@ private fun spanForZoom(zoom: Int): Double = 360.0 / 2.0.pow(zoom)
 /** Grid cell size in degrees for a zoom — mirrors `CLUSTERING_CELL_RATIO = 8`. */
 private fun cellSize(zoom: Int): Double = spanForZoom(zoom) / 8.0
 
+/** Index of the grid cell containing the [region]-center latitude (50°) at [zoom]. */
+private fun centerCellLat(zoom: Int): Int = floor(50.0 / cellSize(zoom)).toInt()
+
+/** Index of the grid cell containing the [region]-center longitude (14°) at [zoom]. */
+private fun centerCellLon(zoom: Int): Int = floor(14.0 / cellSize(zoom)).toInt()
+
 /**
  * An image at the *center* of grid cell `(lat, lon)` for `zoom` (mirrors LocalClusteringTest), so
  * `floor(coord / size)` maps back to `(lat, lon)`.
@@ -334,11 +360,14 @@ private fun img(
     )
 }
 
-/** A distinct server-side cluster per `id` (differs in preview cid, coordinate and count). */
+/**
+ * A distinct server-side cluster per `id` (differs in preview cid, coordinate and count), placed
+ * at the fixtures' region center so it survives eviction on the region changes it must outlive.
+ */
 private fun serverCluster(id: Int): ModelCluster =
     ModelCluster(
         preview = mockImage(cid = id, coordinate = Coordinate.zero),
-        coordinate = Coordinate(latitude = id.toDouble(), longitude = id.toDouble()),
+        coordinate = Coordinate(latitude = 50.0 + id * 1e-4, longitude = 14.0),
         count = id,
     )
 
