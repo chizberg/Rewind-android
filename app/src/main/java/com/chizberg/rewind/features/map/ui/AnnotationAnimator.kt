@@ -28,6 +28,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.tracing.trace
 import com.chizberg.rewind.domain.Region
 import com.chizberg.rewind.features.map.AnnotationValue
+import com.chizberg.rewind.features.map.coordinate
+import com.chizberg.rewind.features.map.key
 import kotlinx.coroutines.flow.first
 
 // iOS AnnotationAnimator: scale 0.01 <-> 1 over 0.2s. The helper animates with UIKit's default

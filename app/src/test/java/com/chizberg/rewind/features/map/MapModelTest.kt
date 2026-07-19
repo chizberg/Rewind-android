@@ -2,9 +2,11 @@
 
 package com.chizberg.rewind.features.map
 
+import com.chizberg.rewind.core.redux.Reducer
 import com.chizberg.rewind.domain.Coordinate
 import com.chizberg.rewind.domain.ImageDate
 import com.chizberg.rewind.domain.ImageRequestFilters
+import com.chizberg.rewind.domain.ImageSorting
 import com.chizberg.rewind.domain.ModelCluster
 import com.chizberg.rewind.domain.ModelImage
 import com.chizberg.rewind.domain.Region
@@ -22,6 +24,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -286,6 +289,208 @@ class MapModelTest {
             )
         }
 
+    // MARK: - Previews (M8)
+
+    /**
+     * Under the limit, the strip lists one card per visible image with no "view as list" tail, and
+     * a server cluster contributes its preview image (flatten across annotation kinds).
+     */
+    @Test
+    fun previewsIncludeClusterPreviewUnderLimit() =
+        reducerTest { scope ->
+            val remote = FakeAnnotationsRemote()
+            val model =
+                makeMapModel(
+                    remote.asRemote,
+                    onLoadFailed = {},
+                    scope = scope,
+                    now = { 0.0 },
+                    sorting = { ImageSorting.DateDescending },
+                )
+
+            remote.response = imagesNearCenter(3, zoom = 12) to listOf(serverCluster(41))
+            model.loadRegion(12)
+            advanceUntilIdle()
+
+            // 3 loose images + the cluster's preview (cid 41), all deduped by cid.
+            assertEquals(
+                setOf(1, 2, 3, 41),
+                model.state.value.currentRegionImages
+                    .map { it.cid }
+                    .toSet(),
+            )
+            assertEquals(
+                4,
+                model.state.value.previews
+                    .count { it is PreviewCard.Image },
+            )
+            assertFalse(
+                model.state.value.previews
+                    .any { it is PreviewCard.ViewAsList },
+            )
+        }
+
+    /** Above the limit, the strip shows the first [PREVIEW_LIMIT] cards plus a "view as list" tail. */
+    @Test
+    fun previewsCapAtLimitWithViewAsListTail() =
+        reducerTest { scope ->
+            val remote = FakeAnnotationsRemote()
+            val model =
+                makeMapModel(
+                    remote.asRemote,
+                    onLoadFailed = {},
+                    scope = scope,
+                    now = { 0.0 },
+                    sorting = { ImageSorting.DateDescending },
+                )
+
+            remote.response = imagesNearCenter(11, zoom = 12) to emptyList()
+            model.loadRegion(12)
+            advanceUntilIdle()
+
+            val previews = model.state.value.previews
+            assertEquals(PREVIEW_LIMIT + 1, previews.size)
+            assertEquals(PREVIEW_LIMIT, previews.count { it is PreviewCard.Image })
+            assertEquals(PreviewCard.ViewAsList, previews.last())
+            assertEquals(11, model.state.value.currentRegionImages.size)
+        }
+
+    /**
+     * A server cluster whose preview shares a cid with a loose image adds no second card: region
+     * images and the strip dedupe by cid across annotation kinds.
+     */
+    @Test
+    fun previewsDedupeClusterPreviewSharingCid() =
+        reducerTest { scope ->
+            val remote = FakeAnnotationsRemote()
+            val model =
+                makeMapModel(
+                    remote.asRemote,
+                    onLoadFailed = {},
+                    scope = scope,
+                    now = { 0.0 },
+                    sorting = { ImageSorting.DateDescending },
+                )
+
+            // 3 loose images (cids 1..3); the cluster preview duplicates cid 2.
+            remote.response = imagesNearCenter(3, zoom = 12) to listOf(serverCluster(2))
+            model.loadRegion(12)
+            advanceUntilIdle()
+
+            assertEquals(
+                setOf(1, 2, 3),
+                model.state.value.currentRegionImages
+                    .map { it.cid }
+                    .toSet(),
+            )
+            assertEquals(3, model.state.value.previews.size)
+        }
+
+    /** An empty visible region shows the single "no images" card, not an empty strip. */
+    @Test
+    fun emptyRegionShowsNoImagesCard() =
+        reducerTest { scope ->
+            val remote = FakeAnnotationsRemote()
+            val model =
+                makeMapModel(remote.asRemote, onLoadFailed = {}, scope = scope, now = { 0.0 })
+
+            remote.response = emptyList<ModelImage>() to emptyList()
+            model.loadRegion(12)
+            advanceUntilIdle()
+
+            assertEquals(listOf(PreviewCard.NoImages), model.state.value.previews)
+            assertTrue(
+                model.state.value.currentRegionImages
+                    .isEmpty(),
+            )
+        }
+
+    /**
+     * While a reload is in flight the strip must not recompute — even though the filter change
+     * cleared the annotations, `updatePreviews` is gated by `isLoading`, so the old strip survives
+     * until the load lands (without the gate the cleared region would flash "no images").
+     */
+    @Test
+    fun previewsGatedWhileLoadingKeepOldStrip() =
+        reducerTest { scope ->
+            val remote = FakeAnnotationsRemote()
+            val model =
+                makeMapModel(
+                    remote.asRemote,
+                    onLoadFailed = {},
+                    scope = scope,
+                    now = { 0.0 },
+                    sorting = { ImageSorting.DateDescending },
+                )
+
+            remote.response = imagesNearCenter(3, zoom = 12) to emptyList()
+            model.loadRegion(12)
+            advanceUntilIdle()
+            assertEquals(3, model.state.value.previews.size)
+
+            // A filter change clears the annotations and starts a gated reload.
+            remote.gateNextCall = true
+            remote.response = imagesNearCenter(2, zoom = 12, startCid = 100) to emptyList()
+            model(
+                MapAction.External.Ui.FiltersChanged(
+                    ImageRequestFilters(imageKind = ImageRequestFilters.ImageKind.Painting),
+                ),
+            )
+            advanceUntilIdle()
+            assertTrue(model.state.value.isLoading)
+            assertEquals(3, model.state.value.previews.size) // old strip kept despite cleared state
+
+            remote.openGate()
+            advanceUntilIdle()
+            assertEquals(2, model.state.value.previews.size) // recomputed once the load lands
+        }
+
+    /** The injected sorting orders the strip: descending puts the newest first, ascending the oldest. */
+    @Test
+    fun previewOrderFollowsInjectedSorting() =
+        reducerTest { scope ->
+            val descRemote = FakeAnnotationsRemote()
+            val descModel =
+                makeMapModel(
+                    descRemote.asRemote,
+                    onLoadFailed = {},
+                    scope = scope,
+                    now = { 0.0 },
+                    sorting = { ImageSorting.DateDescending },
+                )
+            descRemote.response = imagesNearCenter(3, zoom = 12) to emptyList()
+            descModel.loadRegion(12)
+            advanceUntilIdle()
+            // cids 1..3 carry years 1900..1902, so the newest (cid 3) leads under descending order.
+            assertEquals(
+                3,
+                descModel.state.value.previews
+                    .first()
+                    .image
+                    ?.cid,
+            )
+
+            val ascRemote = FakeAnnotationsRemote()
+            val ascModel =
+                makeMapModel(
+                    ascRemote.asRemote,
+                    onLoadFailed = {},
+                    scope = scope,
+                    now = { 0.0 },
+                    sorting = { ImageSorting.DateAscending },
+                )
+            ascRemote.response = imagesNearCenter(3, zoom = 12) to emptyList()
+            ascModel.loadRegion(12)
+            advanceUntilIdle()
+            assertEquals(
+                1,
+                ascModel.state.value.previews
+                    .first()
+                    .image
+                    ?.cid,
+            )
+        }
+
     // MARK: - Deferred mirrors of iOS MapModelTests
     // These exercise features not yet ported to the M6 reducer; each lands (un-ignored, fleshed
     // out) with its feature's milestone. Kept as named stubs so the parity gap with iOS is visible.
@@ -334,6 +539,18 @@ private fun region(
 /** A visible longitude span for a zoom (halves per zoom step); mirrors LocalClusteringTest. */
 private fun spanForZoom(zoom: Int): Double = 360.0 / 2.0.pow(zoom)
 
+/** Dispatches a region change at [zoom] (the previews tests all operate at a single zoom). */
+private fun Reducer<MapState, MapAction>.loadRegion(
+    zoom: Int,
+    latOffset: Double = 0.0,
+) = this(
+    MapAction.External.Map.RegionChanged(
+        region(zoom = zoom, latOffset = latOffset),
+        zoom = zoom,
+        cameraZoom = zoom.toFloat(),
+    ),
+)
+
 /** Grid cell size in degrees for a zoom — mirrors `CLUSTERING_CELL_RATIO = 8`. */
 private fun cellSize(zoom: Int): Double = spanForZoom(zoom) / 8.0
 
@@ -345,19 +562,44 @@ private fun centerCellLon(zoom: Int): Int = floor(14.0 / cellSize(zoom)).toInt()
 
 /**
  * An image at the *center* of grid cell `(lat, lon)` for `zoom` (mirrors LocalClusteringTest), so
- * `floor(coord / size)` maps back to `(lat, lon)`.
+ * `floor(coord / size)` maps back to `(lat, lon)`. Distinct [year]s make date sorting deterministic.
  */
 private fun img(
     cid: Int,
     cellLat: Int,
     cellLon: Int,
     zoom: Int,
+    year: Int = 1900,
 ): ModelImage {
     val s = cellSize(zoom)
     return mockImage(
         cid = cid,
         coordinate = Coordinate(latitude = cellLat * s + s / 2, longitude = cellLon * s + s / 2),
+        year = year,
     )
+}
+
+/**
+ * [count] loose images in distinct cells within ±2 of the region center at [zoom] — each cell holds
+ * one image (below the local-cluster threshold) and every cell sits inside the visible region, so
+ * all of them show up in the preview strip. Years increase with the index, so the newest is last.
+ */
+private fun imagesNearCenter(
+    count: Int,
+    zoom: Int,
+    startCid: Int = 1,
+): List<ModelImage> {
+    val offsets = (-1..1).flatMap { dLat -> (-1..2).map { dLon -> dLat to dLon } }
+    return (0 until count).map { i ->
+        val (dLat, dLon) = offsets[i]
+        img(
+            cid = startCid + i,
+            cellLat = centerCellLat(zoom) + dLat,
+            cellLon = centerCellLon(zoom) + dLon,
+            zoom = zoom,
+            year = 1900 + i,
+        )
+    }
 }
 
 /**
@@ -374,6 +616,7 @@ private fun serverCluster(id: Int): ModelCluster =
 private fun mockImage(
     cid: Int,
     coordinate: Coordinate,
+    year: Int = 1900,
 ): ModelImage =
     ModelImage(
         cid = cid,
@@ -381,7 +624,7 @@ private fun mockImage(
         title = "",
         dir = null,
         coordinate = coordinate,
-        date = ImageDate(year = 1900, year2 = 1900),
+        date = ImageDate(year = year, year2 = year),
     )
 
 /** The loose images currently on the map (from free clustering cells), keyed by cid. */

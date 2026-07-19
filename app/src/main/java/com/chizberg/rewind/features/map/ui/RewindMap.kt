@@ -2,16 +2,23 @@ package com.chizberg.rewind.features.map.ui
 
 import android.util.Log
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.ImageLoader
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
@@ -56,6 +63,10 @@ private const val INITIAL_ZOOM = 3f
 // Server-cluster thumbnail render size in dp (mirrors AnnotationIconFactory's 60dp frame).
 private const val SERVER_CLUSTER_DP = 60f
 
+// First-frame guess for the strip's height, used until it reports its measured size (avoids a
+// visible marker/logo jump on the first layout). Real height replaces it once the strip is laid out.
+private val InitialStripHeight = 210.dp
+
 /**
  * The map surface. Port of iOS `RewindMap`. Each camera idle hands the visible region + zoom to
  * [makeMapModel], which debounces, loads, clusters, and cancels in-flight loads; the map renders
@@ -89,18 +100,28 @@ fun RewindMap(modifier: Modifier = Modifier) {
     val annotations =
         remember(state.clusters, state.clusteredImages) { state.annotations }
 
-    val density = LocalDensity.current.density
+    val localDensity = LocalDensity.current
+    val density = localDensity.density
     val context = LocalContext.current
+    // The strip's measured height, fed back to the map's bottom padding (keeps the Google logo above
+    // it) and to the overlay (so marker placement matches the padded map center). Dynamic because it
+    // includes the device's navigation-bar / home-indicator inset.
+    var stripHeight by remember { mutableStateOf(InitialStripHeight) }
+    // One OkHttp-backed Coil loader shared by the cluster-icon pipeline and the preview strip (and,
+    // later, details/list/comparison), so every surface reads one memory+disk cache.
+    val imageLoader =
+        remember(context) {
+            ImageLoader
+                .Builder(context)
+                .components { add(OkHttpNetworkFetcherFactory()) }
+                .build()
+        }
     // All icon rasterization and delivery machinery (Android-only, see AnnotationIconPipeline).
     val iconPipeline =
         remember {
             AnnotationIconPipeline(
                 icons = AnnotationIconFactory(context, density),
-                imageLoader =
-                    ImageLoader
-                        .Builder(context)
-                        .components { add(OkHttpNetworkFetcherFactory()) }
-                        .build(),
+                imageLoader = imageLoader,
                 // Cluster thumbnails render at 60dp; decode to that (in px), not full resolution.
                 thumbnailTargetPx = (SERVER_CLUSTER_DP * density).toInt(),
             )
@@ -129,28 +150,46 @@ fun RewindMap(modifier: Modifier = Modifier) {
             }
     }
 
-    Box(modifier.fillMaxSize()) {
-        GoogleMap(
-            modifier = Modifier.fillMaxSize(),
-            cameraPositionState = cameraPositionState,
-            // Mirror iOS RewindMapView: rotation and pitch (tilt) disabled; no Android-only zoom
-            // buttons or map toolbar (iOS MapKit has no such controls).
-            uiSettings =
-                MapUiSettings(
-                    rotationGesturesEnabled = false,
-                    tiltGesturesEnabled = false,
-                    zoomControlsEnabled = false,
-                    mapToolbarEnabled = false,
-                ),
-        )
-        // Annotations sit above the map surface, projected onto it (see AnnotationOverlay).
-        AnnotationOverlay(
-            annotations = annotations,
-            region = state.region,
-            cameraPositionState = cameraPositionState,
-            scheme = CurrentScheme,
-            maxRange = maxRange,
-            iconPipeline = iconPipeline,
-        )
+    CompositionLocalProvider(LocalRewindImageLoader provides imageLoader) {
+        Box(modifier.fillMaxSize()) {
+            GoogleMap(
+                modifier = Modifier.fillMaxSize(),
+                cameraPositionState = cameraPositionState,
+                // Keep the Google logo and any attribution above the bottom preview strip. The same
+                // inset is handed to the overlay so its marker placement matches the map's target.
+                contentPadding = PaddingValues(bottom = stripHeight),
+                // Mirror iOS RewindMapView: rotation and pitch (tilt) disabled; no Android-only zoom
+                // buttons or map toolbar (iOS MapKit has no such controls).
+                uiSettings =
+                    MapUiSettings(
+                        rotationGesturesEnabled = false,
+                        tiltGesturesEnabled = false,
+                        zoomControlsEnabled = false,
+                        mapToolbarEnabled = false,
+                    ),
+            )
+            // Annotations sit above the map surface, projected onto it (see AnnotationOverlay).
+            AnnotationOverlay(
+                annotations = annotations,
+                region = state.region,
+                cameraPositionState = cameraPositionState,
+                scheme = CurrentScheme,
+                maxRange = maxRange,
+                iconPipeline = iconPipeline,
+                contentPaddingBottom = stripHeight,
+            )
+            PreviewStrip(
+                previews = state.previews,
+                isLoading = state.isLoading,
+                scheme = CurrentScheme,
+                maxRange = maxRange,
+                // Details/list overlays land with AppModel (M9/M10); until then a tap is a no-op.
+                onCardClick = { Log.d(TAG, "preview card tapped: ${it.id}") },
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .onSizeChanged { stripHeight = with(localDensity) { it.height.toDp() } },
+            )
+        }
     }
 }

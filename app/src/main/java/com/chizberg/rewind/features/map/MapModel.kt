@@ -3,6 +3,7 @@ package com.chizberg.rewind.features.map
 import com.chizberg.rewind.core.redux.AsyncEffect
 import com.chizberg.rewind.core.redux.DebouncedActionId
 import com.chizberg.rewind.core.redux.Reducer
+import com.chizberg.rewind.domain.ImageSorting
 import com.chizberg.rewind.domain.ModelCluster
 import com.chizberg.rewind.domain.ModelImage
 import com.chizberg.rewind.network.AnnotationLoadingParams
@@ -29,7 +30,9 @@ typealias AnnotationsRemote =
  *   the alert via a nil `nonCancelledError`; same observable result).
  *
  * [onLoadFailed] stands in for the M9 `performAppAction(.alert(...))`; [now] supplies the request's
- * `startAt` cursor, injected so tests stay deterministic.
+ * `startAt` cursor, injected so tests stay deterministic. [sorting] is read fresh on each preview
+ * pass (iOS reads `sorting.value`, a `Variable` fed from settings); until settings land it defaults
+ * to iOS's `SettingsState.default.sorting`.
  */
 @Suppress("TooGenericExceptionCaught")
 fun makeMapModel(
@@ -37,6 +40,7 @@ fun makeMapModel(
     onLoadFailed: (Throwable) -> Unit,
     scope: CoroutineScope,
     now: () -> Double = { System.currentTimeMillis() / MILLIS_PER_SECOND },
+    sorting: () -> ImageSorting = { ImageSorting.DateAscending },
 ): Reducer<MapState, MapAction> =
     Reducer(
         initial = MapState.initial,
@@ -124,8 +128,16 @@ fun makeMapModel(
                 state.copy(isLoading = false)
             }
 
-            // Previews land in M8; the debounce wiring is here, the computation is still a stub.
-            MapAction.Internal.UpdatePreviews -> state
+            MapAction.Internal.UpdatePreviews -> {
+                // Skip entirely while a load is in flight, so previews never flash a half-loaded
+                // region (iOS `guard !state.isLoading`); the load's `.Loaded` re-dispatches this.
+                if (state.isLoading) {
+                    state
+                } else {
+                    val images = regionImages(state.annotations, state.region, sorting())
+                    state.copy(currentRegionImages = images, previews = makePreviews(images))
+                }
+            }
 
             MapAction.Internal.ClearAnnotations -> {
                 // Debounced with the same id as regionChanged's updatePreviews, so a clear followed

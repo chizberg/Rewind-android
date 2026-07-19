@@ -13,12 +13,15 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layoutId
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.tracing.trace
 import com.chizberg.rewind.domain.Coordinate
 import com.chizberg.rewind.domain.GradientScheme
 import com.chizberg.rewind.domain.Region
 import com.chizberg.rewind.features.map.AnnotationValue
 import com.chizberg.rewind.features.map.Mercator
+import com.chizberg.rewind.features.map.coordinate
 import com.google.maps.android.compose.CameraPositionState
 import kotlin.math.round
 import kotlin.math.roundToInt
@@ -61,6 +64,10 @@ fun AnnotationOverlay(
     maxRange: IntRange,
     iconPipeline: AnnotationIconPipeline,
     modifier: Modifier = Modifier,
+    // The map's bottom content padding (the preview strip's reserved height). Google Maps draws the
+    // camera target at the center of the *padded* viewport — B/2 above the geometric center — so the
+    // overlay must shift its own center up by the same amount, or every marker sits B/2 too low.
+    contentPaddingBottom: Dp = 0.dp,
 ) {
     val keep = remember(region) { region.expanded(CULL_SPAN_MULTIPLIER) }
     val visible =
@@ -85,6 +92,10 @@ fun AnnotationOverlay(
         modifier = modifier.fillMaxSize(),
     ) { measurables, constraints ->
         val placeables = measurables.map { it.measure(Constraints()) }
+        // Screen point where the map draws the camera target: horizontally centered, but raised by
+        // half the bottom padding to match Google Maps' padded-viewport center.
+        val centerX = constraints.maxWidth / 2f
+        val centerY = (constraints.maxHeight - contentPaddingBottom.toPx()) / 2f
         layout(constraints.maxWidth, constraints.maxHeight) {
             trace("Rewind:place") {
                 // The overlay's single per-frame camera read: placement re-runs on every camera
@@ -104,8 +115,8 @@ fun AnnotationOverlay(
                     val dy = Mercator.worldY(coordinate.latitude, zoom) * density - camY
                     // Centre the view on the point (iOS anchors views on the coordinate).
                     placeable.place(
-                        x = (constraints.maxWidth / 2 + dx).roundToInt() - placeable.width / 2,
-                        y = (constraints.maxHeight / 2 + dy).roundToInt() - placeable.height / 2,
+                        x = (centerX + dx).roundToInt() - placeable.width / 2,
+                        y = (centerY + dy).roundToInt() - placeable.height / 2,
                     )
                 }
             }
@@ -188,18 +199,3 @@ private fun AnnotationContent(
         }
     }
 }
-
-internal fun AnnotationValue.coordinate(): Coordinate =
-    when (this) {
-        is AnnotationValue.Image -> value.coordinate
-        is AnnotationValue.Cluster -> value.coordinate
-        is AnnotationValue.LocalCluster -> value.coordinate
-    }
-
-/** Stable per-annotation identity for Compose keying and presence tracking (mirrors iOS by-id reuse). */
-internal fun AnnotationValue.key(): String =
-    when (this) {
-        is AnnotationValue.Image -> "i:${value.cid}"
-        is AnnotationValue.Cluster -> "c:${value.preview.cid}"
-        is AnnotationValue.LocalCluster -> "lc:${value.id}"
-    }
