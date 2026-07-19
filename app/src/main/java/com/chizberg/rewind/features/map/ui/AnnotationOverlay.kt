@@ -1,6 +1,7 @@
 package com.chizberg.rewind.features.map.ui
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -10,6 +11,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layoutId
 import androidx.compose.ui.unit.Constraints
@@ -63,6 +65,7 @@ fun AnnotationOverlay(
     scheme: GradientScheme,
     maxRange: IntRange,
     iconPipeline: AnnotationIconPipeline,
+    onAnnotationClick: (AnnotationValue) -> Unit,
     modifier: Modifier = Modifier,
     // The map's bottom content padding (the preview strip's reserved height). Google Maps draws the
     // camera target at the center of the *padded* viewport — B/2 above the geometric center — so the
@@ -85,6 +88,7 @@ fun AnnotationOverlay(
                         scheme = scheme,
                         maxRange = maxRange,
                         iconPipeline = iconPipeline,
+                        onClick = onAnnotationClick,
                     )
                 }
             }
@@ -135,12 +139,16 @@ private fun AnnotationMarker(
     scheme: GradientScheme,
     maxRange: IntRange,
     iconPipeline: AnnotationIconPipeline,
+    onClick: (AnnotationValue) -> Unit,
 ) {
     val annotation = entry.value
     Box(
         Modifier
             .layoutId(annotation.coordinate())
-            .presenceScale(entry, frameTimeMs),
+            .presenceScale(entry, frameTimeMs)
+            .pointerInput(annotation) {
+                detectTapGestures { onClick(annotation) }
+            },
     ) {
         AnnotationContent(annotation, scheme, maxRange, iconPipeline)
     }

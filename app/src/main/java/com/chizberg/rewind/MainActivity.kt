@@ -6,7 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
-import com.chizberg.rewind.features.map.ui.RewindMap
+import com.chizberg.rewind.app.RootView
 import com.chizberg.rewind.ui.theme.RewindTheme
 
 class MainActivity : ComponentActivity() {
@@ -16,7 +16,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             RewindTheme {
                 // Edge-to-edge from day one: the map draws under the system bars.
-                RewindMap(modifier = Modifier.fillMaxSize())
+                RootView(modifier = Modifier.fillMaxSize())
             }
         }
     }

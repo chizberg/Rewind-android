@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.Rewind" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.Rewind" parent="android:Theme.Material.Light.NoActionBar">
+        <!-- Black sits behind the map's SurfaceView, so the gaps the pressed-in / slid-away map
+             leaves during an overlay transition read as black. It must live on the WINDOW, not a
+             Compose `.background()` over the map: an opaque background above a hole-punched
+             SurfaceView blacks out the whole composite. -->
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
 </resources>

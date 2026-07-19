@@ -27,13 +27,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.chizberg.rewind.domain.GradientScheme
-import com.chizberg.rewind.domain.RgbaColor
 import com.chizberg.rewind.features.map.PreviewCard
+import com.chizberg.rewind.ui.toComposeColor
 
 /** The bottom preview strip: a full-width bottom sheet of thumbnail cards over the map. Port of iOS
  * `MapControls` content (its `AutoscrollingScrollView` of `ThumbnailCardView`s). The sheet bleeds to
@@ -191,15 +190,6 @@ private fun PlaceholderContent(
         }
     }
 }
-
-/** UI-boundary conversion from the domain's [RgbaColor] to a Compose [Color]. */
-internal fun RgbaColor.toComposeColor(): Color =
-    Color(
-        red = red.toFloat(),
-        green = green.toFloat(),
-        blue = blue.toFloat(),
-        alpha = alpha.toFloat(),
-    )
 
 private val CardWidth = 200.dp
 private val CardHeight = 150.dp

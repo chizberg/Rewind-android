@@ -31,6 +31,7 @@ fun RewindAsyncImage(
     contentDescription: String?,
     modifier: Modifier = Modifier,
     quality: ImageQuality = ImageQuality.Medium,
+    contentScale: ContentScale = ContentScale.Crop,
 ) {
     val context = LocalPlatformContext.current
     AsyncImage(
@@ -43,6 +44,6 @@ fun RewindAsyncImage(
         contentDescription = contentDescription,
         imageLoader = LocalRewindImageLoader.current,
         modifier = modifier,
-        contentScale = ContentScale.Crop,
+        contentScale = contentScale,
     )
 }
