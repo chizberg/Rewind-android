@@ -6,23 +6,18 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.chizberg.rewind.features.details.ui.ImageDetailsView
 import com.chizberg.rewind.features.map.AnnotationValue
 import com.chizberg.rewind.features.map.ui.LocalRewindImageLoader
 import com.chizberg.rewind.features.map.ui.RewindMap
 import com.chizberg.rewind.ui.OverlayScreen
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
@@ -32,8 +27,10 @@ private const val THUMBNAIL_SOURCE = "thumbnail"
 /**
  * The app's root. Port of iOS `RootView`: the map with its controls, plus state-managed overlays on
  * top (image details, alerts; the list/search/settings/onboarding overlays land in their
- * milestones). Owns the [AppGraph] for the composition's lifetime — a rotation-surviving
- * holder-ViewModel is a later refinement (the map already re-inits on rotation today).
+ * milestones). The [AppGraph] is held by [RewindViewModel], so it — and all the loaded map state —
+ * survives activity recreation (rotation, or a recreate while the process lives) instead of being
+ * rebuilt. The camera restores separately from saved instance state (maps-compose's
+ * `rememberCameraPositionState` is `rememberSaveable`).
  *
  * [RewindMap] is composed here permanently, never as a navigation destination, and overlays are
  * plain conditional composables on top of it ([OverlayScreen] owns their animation and the system
@@ -50,11 +47,8 @@ private const val THUMBNAIL_SOURCE = "thumbnail"
  */
 @Composable
 fun RootView(modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    // A single-threaded main scope for every reducer (the @MainActor equivalent).
-    val scope = remember { CoroutineScope(Dispatchers.Main.immediate + SupervisorJob()) }
-    DisposableEffect(Unit) { onDispose { scope.cancel() } }
-    val graph = remember { AppGraph(context, scope) }
+    // Held by a ViewModel so it outlives activity recreation; its reducers run on viewModelScope.
+    val graph = viewModel<RewindViewModel>().graph
 
     val appState by graph.appModel.state.collectAsStateWithLifecycle()
     val clipboard = LocalClipboardManager.current
@@ -125,18 +119,13 @@ fun RootView(modifier: Modifier = Modifier) {
 }
 
 /**
- * Routes a tapped annotation to a details screen. An image → its details; a server cluster → its
- * preview's details (iOS's "cluster previews" mode; the zoom-in / image-list routing lands with M10).
+ * Routes a tapped image annotation to its details screen. Only images reach here — cluster taps are
+ * handled by the map itself (zoom-in, see [RewindMap]); the server-cluster preview and local-cluster
+ * image-list routes land with the "open cluster previews" setting (M13) and the image list (M10).
  */
 private fun presentAnnotation(
     annotation: AnnotationValue,
     dispatch: (AppAction) -> Unit,
 ) {
-    val image =
-        when (annotation) {
-            is AnnotationValue.Image -> annotation.value
-            is AnnotationValue.Cluster -> annotation.value.preview
-            is AnnotationValue.LocalCluster -> null // image list lands in M10
-        }
-    image?.let { dispatch(AppAction.ImageDetails.Present(it, THUMBNAIL_SOURCE)) }
+    annotation.image?.let { dispatch(AppAction.ImageDetails.Present(it, THUMBNAIL_SOURCE)) }
 }

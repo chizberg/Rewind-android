@@ -1,17 +1,22 @@
 package com.chizberg.rewind.features.map.ui
 
+import android.graphics.Bitmap
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -29,14 +34,23 @@ import com.chizberg.rewind.features.map.CameraFocus
 import com.chizberg.rewind.features.map.MapAction
 import com.chizberg.rewind.features.map.MapState
 import com.chizberg.rewind.features.map.PreviewCard
+import com.chizberg.rewind.features.map.coordinate
+import com.chizberg.rewind.features.map.key
 import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.model.BitmapDescriptor
+import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
+import com.google.maps.android.compose.ComposeMapColorScheme
 import com.google.maps.android.compose.GoogleMap
+import com.google.maps.android.compose.GoogleMapComposable
 import com.google.maps.android.compose.MapUiSettings
+import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.rememberCameraPositionState
+import com.google.maps.android.compose.rememberUpdatedMarkerState
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.launch
 
 // Europe and Africa — mirrors the iOS RewindMap `initialRegion`.
 private val InitialRegion =
@@ -50,6 +64,15 @@ private const val INITIAL_ZOOM = 3f
 
 // Server-cluster thumbnail render size in dp (mirrors AnnotationIconFactory's 60dp frame).
 private const val SERVER_CLUSTER_DP = 60f
+
+// Side (dp) of the invisible tap-target marker for pins and local clusters — the 48dp Material touch
+// target, since the visible pin (20×26) is too small to tap. Server clusters use their own 60dp icon
+// size instead, so a tap anywhere on the visible thumbnail lands. Identity is still resolved exactly
+// by the SDK (bounds + z-order); this only sets how large the tappable area is.
+private const val TAP_TARGET_DP = 48f
+
+// How much a cluster tap zooms in, centred on the cluster (iOS MapModel: `currentZoom + 1`).
+private const val CLUSTER_ZOOM_STEP = 1f
 
 // First-frame guess for the strip's height, used until it reports its measured size (avoids a
 // visible marker/logo jump on the first layout). Real height replaces it once the strip is laid out.
@@ -136,10 +159,39 @@ fun RewindMap(
         }
     }
 
+    val cameraScope = rememberCoroutineScope()
+    // What a tap on an annotation does. An image opens its details (routed up to [onAnnotationClick]);
+    // a cluster zooms the camera in toward it — the iOS default when the "open cluster previews"
+    // setting is off (that opt-in setting lands in M13). Local clusters have no image-list screen yet
+    // (M10), so they zoom in too — de-clustering is a reasonable stand-in until the list exists.
+    val onAnnotationTapped: (AnnotationValue) -> Unit = { annotation ->
+        when (annotation) {
+            is AnnotationValue.Image -> onAnnotationClick(annotation)
+            is AnnotationValue.Cluster, is AnnotationValue.LocalCluster ->
+                cameraScope.launch {
+                    cameraPositionState.animate(
+                        CameraUpdateFactory.newLatLngZoom(
+                            annotation.coordinate().toLatLng(),
+                            cameraPositionState.position.zoom + CLUSTER_ZOOM_STEP,
+                        ),
+                    )
+                }
+        }
+    }
+
     Box(modifier.fillMaxSize()) {
         GoogleMap(
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = cameraPositionState,
+            // Base map tiles follow the system theme, like MapKit on iOS. Driven off the same
+            // `isSystemInDarkTheme()` signal as the Compose theme (rather than the SDK's own
+            // FOLLOW_SYSTEM) so both switch on the exact same recomposition.
+            mapColorScheme =
+                if (isSystemInDarkTheme()) {
+                    ComposeMapColorScheme.DARK
+                } else {
+                    ComposeMapColorScheme.LIGHT
+                },
             // Keep the Google logo and any attribution above the bottom preview strip. The same
             // inset is handed to the overlay so its marker placement matches the map's target.
             contentPadding = PaddingValues(bottom = stripHeight),
@@ -152,7 +204,17 @@ fun RewindMap(
                     zoomControlsEnabled = false,
                     mapToolbarEnabled = false,
                 ),
-        )
+        ) {
+            // Invisible SDK markers, one per annotation, are the tap targets: the SDK hit-tests them
+            // natively (exact bounds + z-order, no guessing) and never blocks a map drag, so a swipe
+            // begun on a marker pans while a tap selects. The visible, animated icons stay in the
+            // Compose overlay above; these carry no pixels, only clicks.
+            AnnotationHitTargets(
+                annotations = annotations,
+                density = density,
+                onAnnotationClick = onAnnotationTapped,
+            )
+        }
         // Annotations sit above the map surface, projected onto it (see AnnotationOverlay).
         AnnotationOverlay(
             annotations = annotations,
@@ -161,7 +223,6 @@ fun RewindMap(
             scheme = scheme,
             maxRange = maxRange,
             iconPipeline = iconPipeline,
-            onAnnotationClick = onAnnotationClick,
             contentPaddingBottom = stripHeight,
         )
         PreviewStrip(
@@ -176,4 +237,47 @@ fun RewindMap(
                     .onSizeChanged { stripHeight = with(localDensity) { it.height.toDp() } },
         )
     }
+}
+
+/**
+ * One transparent SDK marker per annotation, positioned at its coordinate — the map's native,
+ * exact tap targets. The SDK owns hit-testing (bounds + z-order) and fires [onAnnotationClick] on a
+ * tap; a drag begun on a marker is never claimed, so the map still pans. The markers carry no
+ * pixels — the visible, animated icons live in the Compose overlay above (see [AnnotationOverlay]).
+ *
+ * Kept off the file's iOS-parallel path deliberately: this is Android infrastructure for the
+ * native-selection divergence, sitting inside the [GoogleMap] content where BitmapDescriptors are
+ * safe to build (the SDK is initialised by the time this composes).
+ */
+@Composable
+@GoogleMapComposable
+private fun AnnotationHitTargets(
+    annotations: List<AnnotationValue>,
+    density: Float,
+    onAnnotationClick: (AnnotationValue) -> Unit,
+) {
+    // One shared descriptor per size: the 60dp server-cluster thumbnail, and a 48dp touch target
+    // for the smaller pins and local clusters. Anchored centre to match the overlay's placement.
+    val clusterIcon = remember(density) { transparentIcon((SERVER_CLUSTER_DP * density).toInt()) }
+    val pinIcon = remember(density) { transparentIcon((TAP_TARGET_DP * density).toInt()) }
+    annotations.forEach { annotation ->
+        key(annotation.key()) {
+            Marker(
+                state = rememberUpdatedMarkerState(annotation.coordinate().toLatLng()),
+                icon = if (annotation is AnnotationValue.Cluster) clusterIcon else pinIcon,
+                anchor = Offset(0.5f, 0.5f),
+                onClick = {
+                    onAnnotationClick(annotation)
+                    true
+                },
+            )
+        }
+    }
+}
+
+/** A fully transparent square [BitmapDescriptor] of [sizePx] — an invisible marker with real bounds. */
+private fun transparentIcon(sizePx: Int): BitmapDescriptor {
+    val side = sizePx.coerceAtLeast(1)
+    val bitmap = Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)
+    return BitmapDescriptorFactory.fromBitmap(bitmap)
 }
