@@ -45,17 +45,7 @@ fun RewindAsyncImage(
     placeholderQuality: ImageQuality? = null,
     onState: ((AsyncImagePainter.State) -> Unit)? = null,
 ) {
-    val context = LocalPlatformContext.current
-    val request =
-        remember(context, path, quality, placeholderQuality) {
-            ImageRequest
-                .Builder(context)
-                .data(imageUrl(path, quality))
-                .crossfade(true)
-                .apply {
-                    placeholderQuality?.let { placeholderMemoryCacheKey(imageUrl(path, it)) }
-                }.build()
-        }
+    val request = rememberRewindImageRequest(path, quality, placeholderQuality)
     AsyncImage(
         model = request,
         contentDescription = contentDescription,
@@ -64,4 +54,28 @@ fun RewindAsyncImage(
         onState = onState,
         contentScale = contentScale,
     )
+}
+
+/**
+ * The [ImageRequest] behind [RewindAsyncImage], for the callers that hand a model to something other
+ * than `AsyncImage` — the zoomable viewer, which loads through telephoto. Same URL, crossfade and
+ * memory-cache placeholder rules, so a photo opened from a screen that already showed it starts on
+ * the cached rendition instead of on black.
+ */
+@Composable
+fun rememberRewindImageRequest(
+    path: String,
+    quality: ImageQuality = ImageQuality.Medium,
+    placeholderQuality: ImageQuality? = null,
+): ImageRequest {
+    val context = LocalPlatformContext.current
+    return remember(context, path, quality, placeholderQuality) {
+        ImageRequest
+            .Builder(context)
+            .data(imageUrl(path, quality))
+            .crossfade(true)
+            .apply {
+                placeholderQuality?.let { placeholderMemoryCacheKey(imageUrl(path, it)) }
+            }.build()
+    }
 }

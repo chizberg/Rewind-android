@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ok">ОК</string>
+    <string name="cancel">Болдырмау</string>
+    <string name="back">Артқа</string>
+    <string name="copy_to_clipboard">Алмасу буферіне көшіру</string>
+    <string name="select_map_app">Маршрутты табу үшін карта қолданбасын таңдаңыз</string>
+    <string name="map_app_google">Google Maps</string>
+    <string name="map_app_yandex">Яндекс Карталар</string>
+    <string name="label_uploaded_by">жүктеген</string>
+    <string name="label_author">автор</string>
+    <string name="label_source">дереккөз</string>
+    <string name="label_address">мекенжай</string>
+    <string name="action_favorite">Таңдаулы</string>
+    <string name="action_show_on_map">Картада көрсету</string>
+    <string name="action_view_on_web">Вебте қарау</string>
+    <string name="action_find_route">Бағыт табу</string>
+    <string name="preview_no_images">Әзірше бұл жерде ештеңе жоқ</string>
+    <string name="preview_view_as_list">Тізім түрінде көру</string>
+</resources>

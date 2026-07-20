@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ok">OK</string>
+    <string name="cancel">Bekor qilish</string>
+    <string name="back">Orqaga</string>
+    <string name="copy_to_clipboard">Vaqtinchalik xotiraga nusxalash</string>
+    <string name="select_map_app">Yo\'nalishni topish uchun xarita ilovasini tanlang</string>
+    <string name="map_app_google">Google Maps</string>
+    <string name="map_app_yandex">Yandex Maps</string>
+    <string name="label_uploaded_by">yuklagan</string>
+    <string name="label_author">muallif</string>
+    <string name="label_source">manba</string>
+    <string name="label_address">manzil</string>
+    <string name="action_favorite">Sevimli</string>
+    <string name="action_show_on_map">Xaritada ko\'rsatish</string>
+    <string name="action_view_on_web">Vebda ko\'rish</string>
+    <string name="action_find_route">Yo\'nalishni topish</string>
+    <string name="preview_no_images">Bu yerda hali hech narsa yo\'q</string>
+    <string name="preview_view_as_list">Roʻyxat koʻrinishida koʻrish</string>
+</resources>

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ok">OK</string>
+    <string name="cancel">Abbrechen</string>
+    <string name="back">Zurück</string>
+    <string name="copy_to_clipboard">In die Zwischenablage kopieren</string>
+    <string name="select_map_app">Wähle eine Karten-App zum Finden der Route</string>
+    <string name="map_app_google">Google Maps</string>
+    <string name="map_app_yandex">Yandex Maps</string>
+    <string name="label_uploaded_by">hochgeladen von</string>
+    <string name="label_author">Autor</string>
+    <string name="label_source">Quelle</string>
+    <string name="label_address">Adresse</string>
+    <string name="action_favorite">Favorit</string>
+    <string name="action_show_on_map">Auf Karte anzeigen</string>
+    <string name="action_view_on_web">Im Web ansehen</string>
+    <string name="action_find_route">Route finden</string>
+    <string name="preview_no_images">Hier ist noch nichts</string>
+    <string name="preview_view_as_list">Als Liste anzeigen</string>
+</resources>

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ok">ОК</string>
+    <string name="cancel">Скасувати</string>
+    <string name="back">Назад</string>
+    <string name="copy_to_clipboard">Скопіювати до буфера обміну</string>
+    <string name="select_map_app">Виберіть застосунок для прокладання маршруту</string>
+    <string name="map_app_google">Google Карти</string>
+    <string name="map_app_yandex">Яндекс Карти</string>
+    <string name="label_uploaded_by">завантажено</string>
+    <string name="label_author">автор</string>
+    <string name="label_source">джерело</string>
+    <string name="label_address">адреса</string>
+    <string name="action_favorite">Улюблене</string>
+    <string name="action_show_on_map">Показати на карті</string>
+    <string name="action_view_on_web">На сайті</string>
+    <string name="action_find_route">Знайти маршрут</string>
+    <string name="preview_no_images">Тут поки нічого немає</string>
+    <string name="preview_view_as_list">Переглянути списком</string>
+</resources>

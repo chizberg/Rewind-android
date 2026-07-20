@@ -10,9 +10,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.chizberg.rewind.R
 import com.chizberg.rewind.features.details.ui.ImageDetailsView
 import com.chizberg.rewind.features.map.AnnotationValue
 import com.chizberg.rewind.features.map.ui.LocalRewindImageLoader
@@ -103,13 +105,15 @@ fun RootView(modifier: Modifier = Modifier) {
                 title = params.title?.let { { Text(it) } },
                 text = params.message?.let { { Text(it) } },
                 confirmButton = {
-                    TextButton(onClick = { graph.appModel(AppAction.Alert.Dismiss) }) { Text("OK") }
+                    TextButton(onClick = { graph.appModel(AppAction.Alert.Dismiss) }) {
+                        Text(stringResource(R.string.ok))
+                    }
                 },
                 dismissButton =
                     params.message?.let { message ->
                         {
                             TextButton(onClick = { clipboard.setText(AnnotatedString(message)) }) {
-                                Text("Copy to clipboard")
+                                Text(stringResource(R.string.copy_to_clipboard))
                             }
                         }
                     },

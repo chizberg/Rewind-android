@@ -1,5 +1,6 @@
 package com.chizberg.rewind.features.map.ui
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,8 +32,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.chizberg.rewind.R
 import com.chizberg.rewind.domain.GradientScheme
 import com.chizberg.rewind.features.map.PreviewCard
 import com.chizberg.rewind.ui.toComposeColor
@@ -132,10 +135,11 @@ private fun ThumbnailCard(
     ) {
         when (card) {
             is PreviewCard.Image -> ImageCardContent(card, scheme, maxRange)
-            PreviewCard.NoImages -> PlaceholderContent(label = "Nothing here yet", emoji = "👀")
+            PreviewCard.NoImages ->
+                PlaceholderContent(label = R.string.preview_no_images, emoji = "👀")
             PreviewCard.ViewAsList ->
                 PlaceholderContent(
-                    label = "View as List",
+                    label = R.string.preview_view_as_list,
                     icon = Icons.AutoMirrored.Rounded.FormatListBulleted,
                 )
         }
@@ -176,7 +180,7 @@ private fun ImageCardContent(
 
 @Composable
 private fun PlaceholderContent(
-    label: String,
+    @StringRes label: Int,
     emoji: String? = null,
     icon: ImageVector? = null,
 ) {
@@ -191,7 +195,7 @@ private fun PlaceholderContent(
                     Icon(icon, contentDescription = null, modifier = Modifier.size(IconSize))
             }
             Text(
-                label,
+                stringResource(label),
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

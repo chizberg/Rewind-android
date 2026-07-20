@@ -1,13 +1,15 @@
 package com.chizberg.rewind.features.details.ui
 
+import androidx.annotation.StringRes
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.rememberTransformableState
-import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -46,7 +48,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -55,11 +56,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.LinkInteractionListener
@@ -70,21 +72,27 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.fromHtml
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImagePainter
+import com.chizberg.rewind.R
 import com.chizberg.rewind.domain.GradientScheme
 import com.chizberg.rewind.domain.ModelImage
 import com.chizberg.rewind.features.details.ImageDetailsAction
 import com.chizberg.rewind.features.details.ImageDetailsModel
 import com.chizberg.rewind.features.details.ImageDetailsState
 import com.chizberg.rewind.features.details.MapApp
+import com.chizberg.rewind.features.map.ui.LocalRewindImageLoader
 import com.chizberg.rewind.features.map.ui.RewindAsyncImage
+import com.chizberg.rewind.features.map.ui.rememberRewindImageRequest
 import com.chizberg.rewind.network.ImageQuality
 import com.chizberg.rewind.ui.DirectionBadge
 import com.chizberg.rewind.ui.ImageDateBadge
 import com.chizberg.rewind.ui.OverlayScreen
+import me.saket.telephoto.zoomable.ZoomSpec
+import me.saket.telephoto.zoomable.coil3.ZoomableAsyncImage
+import me.saket.telephoto.zoomable.rememberZoomableImageState
+import me.saket.telephoto.zoomable.rememberZoomableState
+import java.util.Locale
 
 private const val PASTVU_BASE = "https://pastvu.com"
 
@@ -189,9 +197,14 @@ fun ImageDetailsView(
         )
     }
 
-    if (state.fullscreenPresented) {
+    // The viewer is a layer, not a dialog (see [FullscreenImage]), so back closes it before the
+    // screen under it — its handler registers later, and the dispatcher is LIFO.
+    OverlayScreen(
+        target = state.image.takeIf { state.fullscreenPresented },
+        onBack = { model(ImageDetailsAction.FullscreenPreview.Dismiss) },
+    ) { shown ->
         FullscreenImage(
-            image = state.image,
+            image = shown,
             onDismiss = { model(ImageDetailsAction.FullscreenPreview.Dismiss) },
         )
     }
@@ -432,10 +445,16 @@ private fun TextDetails(
                             if (loading) TextSpinner()
                         }
                     }
-                    LabeledText("uploaded by", AnnotatedString(details.username))
-                    details.author?.let { LabeledText("author", htmlAnnotated(it, guardedLink)) }
-                    details.source?.let { LabeledText("source", htmlAnnotated(it, guardedLink)) }
-                    details.address?.let { LabeledText("address", htmlAnnotated(it, guardedLink)) }
+                    LabeledText(R.string.label_uploaded_by, AnnotatedString(details.username))
+                    details.author?.let {
+                        LabeledText(R.string.label_author, htmlAnnotated(it, guardedLink))
+                    }
+                    details.source?.let {
+                        LabeledText(R.string.label_source, htmlAnnotated(it, guardedLink))
+                    }
+                    details.address?.let {
+                        LabeledText(R.string.label_address, htmlAnnotated(it, guardedLink))
+                    }
                 }
                 // A photo without a description has nothing to blur, but a link in one of its other
                 // fields still starts a load that has to show somewhere.
@@ -469,12 +488,14 @@ private fun TitleRow(
 
 @Composable
 private fun LabeledText(
-    label: String,
+    @StringRes label: Int,
     value: AnnotatedString,
 ) {
     Column {
         Text(
-            text = label.uppercase(),
+            // iOS shows these captions upper-cased; the display locale does the casing, not the
+            // invariant one Kotlin's no-arg `uppercase()` would use.
+            text = stringResource(label).uppercase(Locale.getDefault()),
             style = MaterialTheme.typography.labelSmall,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Bold,
@@ -608,13 +629,15 @@ private fun ActionButton(
 }
 
 private val ImageDetailsAction.Button.label: String
-    get() =
-        when (this) {
-            ImageDetailsAction.Button.Favorite -> "Favorite"
-            ImageDetailsAction.Button.ShowOnMap -> "Show on map"
-            ImageDetailsAction.Button.ViewOnWeb -> "View on Web"
-            ImageDetailsAction.Button.Route -> "Find route"
-        }
+    @Composable get() =
+        stringResource(
+            when (this) {
+                ImageDetailsAction.Button.Favorite -> R.string.action_favorite
+                ImageDetailsAction.Button.ShowOnMap -> R.string.action_show_on_map
+                ImageDetailsAction.Button.ViewOnWeb -> R.string.action_view_on_web
+                ImageDetailsAction.Button.Route -> R.string.action_find_route
+            },
+        )
 
 private fun ImageDetailsAction.Button.icon(isFavorite: Boolean): ImageVector =
     when (this) {
@@ -646,7 +669,7 @@ private fun BackButton(
     ) {
         Icon(
             imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-            contentDescription = "Back",
+            contentDescription = stringResource(R.string.back),
             modifier = Modifier.padding(8.dp),
         )
     }
@@ -659,7 +682,7 @@ private fun MapAppDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Select map app to find route") },
+        title = { Text(stringResource(R.string.select_map_app)) },
         text = {
             Column {
                 MapApp.entries.forEach { app ->
@@ -671,58 +694,79 @@ private fun MapAppDialog(
             }
         },
         confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        },
     )
 }
 
 private val MapApp.appName: String
-    get() =
-        when (this) {
-            MapApp.Google -> "Google Maps"
-            MapApp.Yandex -> "Yandex Maps"
-        }
+    @Composable get() =
+        stringResource(
+            when (this) {
+                MapApp.Google -> R.string.map_app_google
+                MapApp.Yandex -> R.string.map_app_yandex
+            },
+        )
 
+/**
+ * The full-screen photo viewer. Port of iOS `ZoomableImageScreen`, whose feel comes from a
+ * `UIScrollView`: the pan is bounded by the photo's own edges, it flings and settles, a double tap
+ * zooms, and the chrome hides while zoomed. A `Modifier.transformable` gives none of that — the
+ * earlier one panned into empty black and stopped dead on release — so the gestures come from
+ * telephoto (the option M9 left open), which models exactly that scroll view.
+ *
+ * It is a layer of this composition, not a `Dialog`: a dialog gets its own window, which neither
+ * inherits our edge-to-edge flags nor the activity's cutout mode, and left a band of untouched
+ * screen under the status bar. As a layer it also joins the app's overlay stack — the same
+ * enter/exit and predictive-back as the details screen it opens from.
+ */
 @Composable
 private fun FullscreenImage(
     image: ModelImage,
     onDismiss: () -> Unit,
 ) {
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
-    ) {
-        var scale by remember { mutableFloatStateOf(1f) }
-        var offsetX by remember { mutableFloatStateOf(0f) }
-        var offsetY by remember { mutableFloatStateOf(0f) }
-        val transformState =
-            rememberTransformableState { zoomChange, panChange, _ ->
-                scale = (scale * zoomChange).coerceIn(1f, 5f)
-                offsetX += panChange.x
-                offsetY += panChange.y
-            }
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(Color.Black)
-                .pointerInput(Unit) { detectTapGestures { onDismiss() } },
-            contentAlignment = Alignment.Center,
+    // How deep the zoom goes. iOS stops at `max(image.size / frame.size)` — and `UIImage.size` is
+    // in POINTS for a network-decoded image (scale 1), so its limit is one image pixel per point:
+    // on a 3× screen, three device pixels per image pixel. telephoto's factor is against the
+    // photo's own pixels, and Android's point is the dp, so the same limit is exactly the density.
+    // (iOS also floors its cap at 1.2× the fitted size, which telephoto can't express — it floors
+    // at the fitted size itself — so a scan smaller than the screen simply doesn't zoom here.)
+    val maxZoom = LocalDensity.current.density
+    val zoomable = rememberZoomableState(ZoomSpec(maxZoomFactor = maxZoom))
+    val imageState = rememberZoomableImageState(zoomable)
+    var controlsHidden by remember { mutableStateOf(false) }
+
+    // iOS: leaving 1× hides the chrome, returning to 1× brings it back; a tap toggles it either way.
+    val zoomed = (zoomable.zoomFraction ?: 0f) > 0f
+    LaunchedEffect(zoomed) { controlsHidden = zoomed }
+
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
+        ZoomableAsyncImage(
+            model =
+                rememberRewindImageRequest(
+                    path = image.imagePath,
+                    quality = ImageQuality.High,
+                    placeholderQuality = ImageQuality.Medium,
+                ),
+            contentDescription = image.title,
+            modifier = Modifier.fillMaxSize(),
+            state = imageState,
+            imageLoader = LocalRewindImageLoader.current,
+            onClick = { controlsHidden = !controlsHidden },
+        )
+        if (!imageState.isImageDisplayed && !imageState.isPlaceholderDisplayed) {
+            CircularProgressIndicator(Modifier.align(Alignment.Center))
+        }
+        AnimatedVisibility(
+            visible = !controlsHidden,
+            modifier = Modifier.align(Alignment.TopStart),
+            enter = fadeIn(),
+            exit = fadeOut(),
         ) {
-            RewindAsyncImage(
-                path = image.imagePath,
-                contentDescription = image.title,
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .transformable(transformState)
-                        .graphicsLayer(
-                            scaleX = scale,
-                            scaleY = scale,
-                            translationX = offsetX,
-                            translationY = offsetY,
-                        ),
-                quality = ImageQuality.High,
-                contentScale = ContentScale.Fit,
-                placeholderQuality = ImageQuality.Medium,
+            BackButton(
+                onClick = onDismiss,
+                modifier = Modifier.safeDrawingPadding().padding(8.dp),
             )
         }
     }
@@ -739,14 +783,14 @@ private fun DetailsAlert(
         onDismissRequest = onDismiss,
         title = title?.let { { Text(it) } },
         text = message?.let { { Text(it) } },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("OK") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ok)) } },
         dismissButton =
             message?.let {
                 {
                     TextButton(onClick = {
                         clipboard.setText(AnnotatedString(it))
                         onDismiss()
-                    }) { Text("Copy to clipboard") }
+                    }) { Text(stringResource(R.string.copy_to_clipboard)) }
                 }
             },
     )

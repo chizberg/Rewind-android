@@ -41,6 +41,13 @@ android {
         compose = true
         buildConfig = true
     }
+    androidResources {
+        // Builds LocaleConfig from the res/values-* folders, which is what puts the app into the
+        // system's per-app language picker (Settings > Apps > Rewind > Language). Without it the
+        // translations only ever follow the system locale. `res/resources.properties` names the
+        // locale the unqualified values/ folder holds (en).
+        generateLocaleConfig = true
+    }
 }
 
 secrets {
@@ -94,6 +101,10 @@ dependencies {
     implementation(libs.play.services.maps)
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
+    // The full-screen photo viewer (M9's "telephoto or hand-rolled" call): pan bounded to the
+    // image's own edges, fling with decay, double-tap and quick zoom — the system photo-viewer
+    // behaviour iOS gets from UIScrollView and a `transformable` Modifier does not have.
+    implementation(libs.telephoto.zoomable.image.coil)
     // Systrace sections around the annotation icon pipeline ("Rewind:*" in a Perfetto capture);
     // runtime-tracing additionally names every recomposition in Studio's System Trace.
     implementation(libs.androidx.tracing.ktx)
