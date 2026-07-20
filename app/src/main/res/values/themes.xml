@@ -7,5 +7,12 @@
              Compose `.background()` over the map: an opaque background above a hole-punched
              SurfaceView blacks out the whole composite. -->
         <item name="android:windowBackground">@android:color/black</item>
+
+        <!-- Edge-to-edge in EVERY orientation. The default cutout mode only lets a window into the
+             cutout on the screen's short edge, so in landscape the system letterboxes the camera
+             strip black and the app starts after it — a stray band down one side that no layout of
+             ours could remove. `always` hands us that strip; what must stay clear of it is handled
+             by the safe-area insets, per view. -->
+        <item name="android:windowLayoutInDisplayCutoutMode">always</item>
     </style>
 </resources>
