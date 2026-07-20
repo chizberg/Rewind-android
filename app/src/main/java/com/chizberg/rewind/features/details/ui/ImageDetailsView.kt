@@ -1,6 +1,9 @@
 package com.chizberg.rewind.features.details.ui
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
@@ -85,6 +88,15 @@ import com.chizberg.rewind.ui.OverlayScreen
 
 private const val PASTVU_BASE = "https://pastvu.com"
 
+/**
+ * What the text block and the action tiles are drawn on: the lowest container tone, which is plain
+ * white in a light scheme and near-black in a dark one — the M3 counterpart of iOS
+ * `.systemBackground`, which is what those two carry there. `surface` would not do: it is a tinted
+ * near-white a hair away from the page tone, and the tiles dissolved into it.
+ */
+private val BlockColor: Color
+    @Composable get() = MaterialTheme.colorScheme.surfaceContainerLowest
+
 // The active favorite button's fill (iOS `.yellow.mix(with: .black, by: 0.1)`).
 private val FavoriteYellow = Color(0xFFE0B32E)
 
@@ -101,8 +113,17 @@ private val SidebarWidth = 325.dp
 /** The photo's reserved box before anything has loaded — 4:3, the shape of most PastVu scans. */
 private const val PLACEHOLDER_ASPECT = 4f / 3f
 
-/** iOS `.blur(radius: 7)` over the description while a linked photo loads. */
+/** iOS `.blur(radius: 7)` over the text while a linked photo loads. */
 private val DescriptionBlur = 7.dp
+
+/**
+ * The action tiles' corner, and the corner the favorite tile morphs to once it is on — the M3
+ * expressive "shape change carries the state change" idiom (`ToggleButton`'s round↔square morph;
+ * the component itself only lands in material3 1.5, the motion is the same). 28dp exceeds half the
+ * tile's height, so the checked shape reads as a pill.
+ */
+private val ButtonCorner = 15.dp
+private val ButtonCheckedCorner = 28.dp
 
 /**
  * The spinners inside the text block. iOS uses a plain `ProgressView()` there (only the one over the
@@ -136,7 +157,11 @@ fun ImageDetailsView(
     // Backgrounds bleed under the system bars and the cutout (iOS `.ignoresSafeArea()` on the
     // backing rectangles); the safe area is padding *inside* them, never around them — padding the
     // screen itself would shrink the scroll viewport and leave dead strips top and bottom.
-    Surface(modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
+    //
+    // The page is the *recessed* tone (iOS `.secondarySystemBackground`) so the text block and the
+    // action tiles can sit on the raised one (see [BlockColor]) — the layering iOS gets for free
+    // from its two system backgrounds.
+    Surface(modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surfaceContainer) {
         Box(Modifier.fillMaxSize()) {
             BoxWithConstraints {
                 if (maxWidth >= SplitWidthThreshold) {
@@ -223,7 +248,11 @@ private fun ScrollContent(
             scheme = scheme,
             maxRange = maxRange,
             onLink = { model(ImageDetailsAction.DescriptionLink(it)) },
-            modifier = Modifier.padding(16.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .background(BlockColor)
+                    .padding(16.dp),
         )
         ActionButtons(
             state = state,
@@ -291,7 +320,11 @@ private fun SplitContent(
                 scheme = scheme,
                 maxRange = maxRange,
                 onLink = { model(ImageDetailsAction.DescriptionLink(it)) },
-                modifier = Modifier.padding(16.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .background(BlockColor)
+                        .padding(16.dp),
             )
             ActionButtons(
                 state = state,
@@ -347,6 +380,18 @@ private fun DetailsPicture(
     }
 }
 
+/**
+ * Title, description and the labelled fields.
+ *
+ * Two loads show up here. The screen's own (`details == null`) replaces the block with a spinner,
+ * as on iOS. A *link* load — a tap on a pastvu photo, which ends in a nested screen — blurs the
+ * description behind a spinner, as on iOS; over a slow connection that stretch is long, and without
+ * it the tap reads as if nothing happened.
+ *
+ * Taps are dropped everywhere for that stretch, not only in the description: iOS reroutes link taps
+ * into the reducer for the description alone, ours linkifies author, source and address through the
+ * same route, and a second load started from one of them would race the first.
+ */
 @Composable
 private fun TextDetails(
     state: ImageDetailsState,
@@ -355,6 +400,15 @@ private fun TextDetails(
     onLink: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val loading = state.loadingAnotherImage
+    val blurRadius by animateDpAsState(if (loading) DescriptionBlur else 0.dp, label = "blur")
+    // The guard reads a live flag: the annotated strings — and the listeners baked into them — are
+    // cached across the load, so a `loading` captured while parsing would go stale.
+    val loadingNow = rememberUpdatedState(loading)
+    val currentOnLink = rememberUpdatedState(onLink)
+    val guardedLink =
+        remember { { url: String -> if (!loadingNow.value) currentOnLink.value(url) } }
+
     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         TitleRow(state.image, scheme, maxRange)
 
@@ -370,13 +424,23 @@ private fun TextDetails(
                 TextSpinner()
             }
         } else {
-            details.description?.let {
-                Description(html = it, loading = state.loadingAnotherImage, onLink = onLink)
+            Box(contentAlignment = Alignment.Center) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    details.description?.let { desc ->
+                        Box(contentAlignment = Alignment.Center) {
+                            HtmlText(desc, guardedLink, Modifier.blur(blurRadius))
+                            if (loading) TextSpinner()
+                        }
+                    }
+                    LabeledText("uploaded by", AnnotatedString(details.username))
+                    details.author?.let { LabeledText("author", htmlAnnotated(it, guardedLink)) }
+                    details.source?.let { LabeledText("source", htmlAnnotated(it, guardedLink)) }
+                    details.address?.let { LabeledText("address", htmlAnnotated(it, guardedLink)) }
+                }
+                // A photo without a description has nothing to blur, but a link in one of its other
+                // fields still starts a load that has to show somewhere.
+                if (loading && details.description == null) TextSpinner()
             }
-            LabeledText("uploaded by", AnnotatedString(details.username))
-            details.author?.let { LabeledText("author", htmlAnnotated(it, onLink)) }
-            details.source?.let { LabeledText("source", htmlAnnotated(it, onLink)) }
-            details.address?.let { LabeledText("address", htmlAnnotated(it, onLink)) }
         }
     }
 }
@@ -417,29 +481,6 @@ private fun LabeledText(
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
         )
         Text(text = value, style = MaterialTheme.typography.bodyMedium)
-    }
-}
-
-/**
- * The description, blurred behind a spinner while a link inside it is loading its photo (iOS blurs
- * by 7 and disables hit testing). Taps are dropped for the same stretch — the guard reads the live
- * flag, because the annotated string (and the listener baked into it) is cached across it.
- */
-@Composable
-private fun Description(
-    html: String,
-    loading: Boolean,
-    onLink: (String) -> Unit,
-) {
-    val blurRadius by animateDpAsState(if (loading) DescriptionBlur else 0.dp, label = "blur")
-    val loadingNow = rememberUpdatedState(loading)
-    val currentOnLink = rememberUpdatedState(onLink)
-    val guardedLink =
-        remember { { url: String -> if (!loadingNow.value) currentOnLink.value(url) } }
-
-    Box(contentAlignment = Alignment.Center) {
-        HtmlText(html, guardedLink, Modifier.blur(blurRadius))
-        if (loading) TextSpinner()
     }
 }
 
@@ -514,6 +555,11 @@ private fun ActionButtons(
     }
 }
 
+/**
+ * One tile of the action grid. The favorite tile is the only stateful one, and it announces its
+ * state the M3 expressive way — the shape morphs, springing from a rounded square to a pill as the
+ * fill turns yellow — instead of relying on the colour swap alone.
+ */
 @Composable
 private fun ActionButton(
     button: ImageDetailsAction.Button,
@@ -522,14 +568,31 @@ private fun ActionButton(
     modifier: Modifier = Modifier,
 ) {
     val active = button == ImageDetailsAction.Button.Favorite && isFavorite
-    val container =
-        if (active) FavoriteYellow else MaterialTheme.colorScheme.surfaceContainerHighest
-    val content =
-        if (active) Color.Black else MaterialTheme.colorScheme.onSurface
+    val corner by
+        animateDpAsState(
+            targetValue = if (active) ButtonCheckedCorner else ButtonCorner,
+            animationSpec =
+                spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMediumLow,
+                ),
+            label = "buttonCorner",
+        )
+    val container by
+        animateColorAsState(
+            if (active) FavoriteYellow else BlockColor,
+            label = "buttonContainer",
+        )
+    val content by
+        animateColorAsState(
+            if (active) Color.Black else MaterialTheme.colorScheme.onSurface,
+            label = "buttonContent",
+        )
     Surface(
         onClick = onClick,
         modifier = modifier,
-        shape = RoundedCornerShape(15.dp),
+        // The spring overshoots past the target on the way in; a negative corner would throw.
+        shape = RoundedCornerShape(corner.coerceAtLeast(0.dp)),
         color = container,
         contentColor = content,
     ) {
