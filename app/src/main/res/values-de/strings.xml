@@ -13,6 +13,8 @@
     <string name="label_address">Adresse</string>
     <string name="action_favorite">Favorit</string>
     <string name="action_show_on_map">Auf Karte anzeigen</string>
+    <string name="action_share">Teilen</string>
+    <string name="action_save_image">Bild speichern</string>
     <string name="action_view_on_web">Im Web ansehen</string>
     <string name="action_find_route">Route finden</string>
     <string name="preview_no_images">Hier ist noch nichts</string>

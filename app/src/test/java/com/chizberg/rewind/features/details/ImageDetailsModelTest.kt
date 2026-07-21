@@ -107,6 +107,8 @@ private class Harness(
             showOnMap = {},
             canOpenUrl = { true },
             urlOpener = { openedUrls += it },
+            saveImage = {},
+            shareImage = {},
             extractModelImage = { details -> mockImage(cid = details.cid) },
             scope = scope,
         )

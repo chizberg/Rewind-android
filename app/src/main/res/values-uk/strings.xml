@@ -13,6 +13,8 @@
     <string name="label_address">адреса</string>
     <string name="action_favorite">Улюблене</string>
     <string name="action_show_on_map">Показати на карті</string>
+    <string name="action_share">Поділитися</string>
+    <string name="action_save_image">Зберегти зображення</string>
     <string name="action_view_on_web">На сайті</string>
     <string name="action_find_route">Знайти маршрут</string>
     <string name="preview_no_images">Тут поки нічого немає</string>

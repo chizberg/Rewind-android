@@ -13,6 +13,8 @@
     <string name="label_address">мекенжай</string>
     <string name="action_favorite">Таңдаулы</string>
     <string name="action_show_on_map">Картада көрсету</string>
+    <string name="action_share">Бөлісу</string>
+    <string name="action_save_image">Суретті сақтау</string>
     <string name="action_view_on_web">Вебте қарау</string>
     <string name="action_find_route">Бағыт табу</string>
     <string name="preview_no_images">Әзірше бұл жерде ештеңе жоқ</string>

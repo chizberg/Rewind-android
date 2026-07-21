@@ -55,6 +55,9 @@ class AppGraph(
 
     private val remotes = RewindRemotes(RequestPerformer(okHttpRequestPerformer(OkHttpClient())))
 
+    /** Gallery / share sheet, both fed from [imageLoader]'s cache. */
+    private val imageExport = ImageExport(appContext, imageLoader)
+
     private val urlOpener: (String) -> Unit = { url ->
         runCatching {
             appContext.startActivity(
@@ -97,6 +100,8 @@ class AppGraph(
             },
             canOpenUrl = canOpenUrl,
             urlOpener = urlOpener,
+            saveImage = imageExport::save,
+            shareImage = imageExport::share,
             extractModelImage = ::extractModelImage,
             scope = scope,
         )

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The one directory the FileProvider exposes: the staging copies the share sheet hands to other
+    apps (see ImageExport.share). Nothing else of ours is reachable through the provider.
+-->
+<paths>
+    <cache-path
+        name="shared"
+        path="shared/" />
+</paths>

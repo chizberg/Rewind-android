@@ -16,6 +16,32 @@ import kotlin.coroutines.cancellation.CancellationException
  * an `ACTION_VIEW` intent. */
 typealias UrlOpener = (String) -> Unit
 
+/**
+ * Writes the photo to the device gallery. iOS hands its decoded `UIImage` to `PHPhotoLibrary`; ours
+ * only names the image (the reducer holds no bitmap — the project-wide Coil divergence), and the app
+ * layer pulls the pixels through the shared loader and inserts them into MediaStore. Throws on
+ * failure, which the reducer turns into iOS's "Unable to save image" alert.
+ */
+typealias ImageSaver = suspend (ModelImage) -> Unit
+
+/** Hands the photo to the system share sheet. Port of iOS `makeShareVC` + its `.sheet`. */
+typealias ImageSharer = suspend (ShareContent) -> Unit
+
+/**
+ * What the share sheet carries. iOS passes four activity items (image, title, description, URL);
+ * Android takes one image stream plus one text blob, so the app layer joins these.
+ *
+ * [description] is the raw PastVu HTML — iOS shares the *plain* text of its attributed string, and
+ * the stripping happens where the platform's HTML parser lives (the app layer), not in this
+ * JVM-only reducer.
+ */
+data class ShareContent(
+    val image: ModelImage,
+    val title: String,
+    val description: String?,
+    val url: String,
+)
+
 /** The image-details reducer. Port of iOS `ImageDetailsModel`. */
 typealias ImageDetailsModel = Reducer<ImageDetailsState, ImageDetailsAction>
 
@@ -26,7 +52,8 @@ typealias ImageDetailsModel = Reducer<ImageDetailsState, ImageDetailsAction>
  * - **no decoded image in state.** iOS holds `uiImage`/`cachedLowResImage` (`UIImage`) because its
  *   ImageLoader hands back the bitmap; ours follows the project-wide Coil divergence — the picture
  *   is loaded from [ModelImage.imagePath] by Coil in the view. Share / save (which need the actual
- *   pixels) land in the details UI slice via the Coil-loaded bitmap.
+ *   pixels) go through the injected [ImageSaver] / [ImageSharer], which pull them from the same
+ *   loader; the reducer only tracks that a save succeeded ([isImageSaved], as on iOS).
  * - **no `Identified` wrapper** around the nested details / alert: Compose overlays key off content
  *   presence, so plain nullables suffice.
  * - **translation** ([details]-driven `TranslationState`) and **comparison** (`comparisonDeps`) are
@@ -38,6 +65,7 @@ data class ImageDetailsState(
     val isFavorite: Boolean,
     val actionButtons: List<ImageDetailsAction.Button>,
     val details: ModelImageDetails? = null,
+    val isImageSaved: Boolean = false,
     val loadingAnotherImage: Boolean = false,
     val mapOptionsPresented: Boolean = false,
     val fullscreenPresented: Boolean = false,
@@ -56,7 +84,7 @@ sealed interface ImageDetailsAction {
     ) : ImageDetailsAction
 
     /** The action-grid buttons that are implemented in M9 (compare buttons arrive with M14). */
-    enum class Button { Favorite, ShowOnMap, ViewOnWeb, Route }
+    enum class Button { Favorite, ShowOnMap, Share, SaveImage, ViewOnWeb, Route }
 
     data class OnButton(
         val button: Button,
@@ -75,6 +103,9 @@ sealed interface ImageDetailsAction {
         data object Present : FullscreenPreview
 
         data object Dismiss : FullscreenPreview
+
+        /** The save button of the viewer's own chrome (iOS `ZoomableImageScreen.saveImage`). */
+        data object SaveImage : FullscreenPreview
     }
 
     sealed interface AnotherImage : ImageDetailsAction {
@@ -95,6 +126,11 @@ sealed interface ImageDetailsAction {
     }
 
     sealed interface Internal : ImageDetailsAction {
+        /** Both save entry points (the action tile and the viewer's chrome) funnel through here. */
+        data object SaveImage : Internal
+
+        data object ImageSaved : Internal
+
         data class DetailsLoaded(
             val details: ModelImageDetails,
         ) : Internal
@@ -130,6 +166,8 @@ fun makeImageDetailsModel(
     showOnMap: (Coordinate) -> Unit,
     canOpenUrl: (String) -> Boolean,
     urlOpener: UrlOpener,
+    saveImage: ImageSaver,
+    shareImage: ImageSharer,
     extractModelImage: (ModelImageDetails) -> ModelImage,
     scope: CoroutineScope,
 ): ImageDetailsModel =
@@ -143,6 +181,8 @@ fun makeImageDetailsModel(
                     listOf(
                         ImageDetailsAction.Button.Favorite,
                         ImageDetailsAction.Button.ShowOnMap,
+                        ImageDetailsAction.Button.Share,
+                        ImageDetailsAction.Button.SaveImage,
                         ImageDetailsAction.Button.ViewOnWeb,
                         ImageDetailsAction.Button.Route,
                     ),
@@ -209,6 +249,40 @@ fun makeImageDetailsModel(
                         state
                     }
 
+                    ImageDetailsAction.Button.Share -> {
+                        // iOS builds the share sheet only once the details (and the decoded image)
+                        // are in; ours shares what it has — the description is the only part that
+                        // waits on the load, and a tile that silently does nothing reads as broken.
+                        val content =
+                            ShareContent(
+                                image = state.image,
+                                title = state.image.title,
+                                description = state.details?.description,
+                                url = pastVuUrl(state.image.cid),
+                            )
+                        asyncEffect(
+                            AsyncEffect.perform { send ->
+                                try {
+                                    shareImage(content)
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    send(present(errorAlert("Unable to share image", e)))
+                                }
+                            },
+                        )
+                        state
+                    }
+
+                    ImageDetailsAction.Button.SaveImage -> {
+                        asyncEffect(
+                            AsyncEffect.anotherAction(
+                                action = ImageDetailsAction.Internal.SaveImage,
+                            ),
+                        )
+                        state
+                    }
+
                     ImageDetailsAction.Button.ViewOnWeb -> {
                         effect { urlOpener(pastVuUrl(state.image.cid)) }
                         state
@@ -242,6 +316,13 @@ fun makeImageDetailsModel(
 
             ImageDetailsAction.FullscreenPreview.Dismiss -> state.copy(fullscreenPresented = false)
 
+            ImageDetailsAction.FullscreenPreview.SaveImage -> {
+                asyncEffect(
+                    AsyncEffect.anotherAction(action = ImageDetailsAction.Internal.SaveImage),
+                )
+                state
+            }
+
             is ImageDetailsAction.AnotherImage.Present -> {
                 val nested =
                     makeImageDetailsModel(
@@ -257,6 +338,8 @@ fun makeImageDetailsModel(
                         showOnMap = showOnMap,
                         canOpenUrl = canOpenUrl,
                         urlOpener = urlOpener,
+                        saveImage = saveImage,
+                        shareImage = shareImage,
                         extractModelImage = extractModelImage,
                         scope = scope,
                     )
@@ -269,6 +352,27 @@ fun makeImageDetailsModel(
                 action.params?.let { state.copy(alert = it) } ?: state
 
             ImageDetailsAction.Alert.Dismiss -> state.copy(alert = null)
+
+            ImageDetailsAction.Internal.SaveImage -> {
+                val image = state.image
+                asyncEffect(
+                    AsyncEffect.perform { send ->
+                        try {
+                            saveImage(image)
+                            send(ImageDetailsAction.Internal.ImageSaved)
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            send(present(errorAlert("Unable to save image", e)))
+                        }
+                    },
+                )
+                state
+            }
+
+            // iOS also fires a success haptic here; ours plays it in the view, where the haptic
+            // feedback handle lives.
+            ImageDetailsAction.Internal.ImageSaved -> state.copy(isImageSaved = true)
 
             is ImageDetailsAction.Internal.DetailsLoaded -> state.copy(details = action.details)
 

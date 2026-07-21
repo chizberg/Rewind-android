@@ -13,6 +13,8 @@
     <string name="label_address">manzil</string>
     <string name="action_favorite">Sevimli</string>
     <string name="action_show_on_map">Xaritada ko\'rsatish</string>
+    <string name="action_share">Ulashish</string>
+    <string name="action_save_image">Rasmni saqlash</string>
     <string name="action_view_on_web">Vebda ko\'rish</string>
     <string name="action_find_route">Yo\'nalishni topish</string>
     <string name="preview_no_images">Bu yerda hali hech narsa yo\'q</string>

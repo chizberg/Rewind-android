@@ -34,8 +34,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Directions
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material.icons.rounded.Place
 import androidx.compose.material.icons.rounded.Public
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material3.AlertDialog
@@ -57,10 +60,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
@@ -107,6 +112,10 @@ private val BlockColor: Color
 
 // The active favorite button's fill (iOS `.yellow.mix(with: .black, by: 0.1)`).
 private val FavoriteYellow = Color(0xFFE0B32E)
+
+// The saved button's fill (iOS `.green.mix(with: .black, by: 0.1)` over systemGreen), with white on
+// it as there — a fixed pair, so it is spelled out rather than taken from the scheme.
+private val SavedGreen = Color(0xFF2FB350)
 
 /**
  * Where the photo stops being a full-width header and moves beside its metadata. Port of iOS
@@ -205,8 +214,17 @@ fun ImageDetailsView(
     ) { shown ->
         FullscreenImage(
             image = shown,
+            isImageSaved = state.isImageSaved,
+            onSave = { model(ImageDetailsAction.FullscreenPreview.SaveImage) },
             onDismiss = { model(ImageDetailsAction.FullscreenPreview.Dismiss) },
         )
+    }
+
+    // iOS fires a success notification haptic when the photo lands in the library; the reducer has
+    // no haptic handle, so the confirmation is played here off the state flip.
+    val haptics = LocalHapticFeedback.current
+    LaunchedEffect(state.isImageSaved) {
+        if (state.isImageSaved) haptics.performHapticFeedback(HapticFeedbackType.Confirm)
     }
 
     state.alert?.let { params ->
@@ -570,6 +588,7 @@ private fun ActionButtons(
             ActionButton(
                 button = button,
                 isFavorite = state.isFavorite,
+                isImageSaved = state.isImageSaved,
                 onClick = { dispatch(ImageDetailsAction.OnButton(button)) },
             )
         }
@@ -577,18 +596,25 @@ private fun ActionButtons(
 }
 
 /**
- * One tile of the action grid. The favorite tile is the only stateful one, and it announces its
- * state the M3 expressive way — the shape morphs, springing from a rounded square to a pill as the
- * fill turns yellow — instead of relying on the colour swap alone.
+ * One tile of the action grid. Favorite and save are the stateful ones (iOS gives each an "on" fill,
+ * yellow and green), and they announce it the M3 expressive way — the shape morphs, springing from a
+ * rounded square to a pill as the fill turns — instead of relying on the colour swap alone.
  */
 @Composable
 private fun ActionButton(
     button: ImageDetailsAction.Button,
     isFavorite: Boolean,
+    isImageSaved: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val active = button == ImageDetailsAction.Button.Favorite && isFavorite
+    val activeFill =
+        when (button) {
+            ImageDetailsAction.Button.Favorite -> FavoriteYellow.takeIf { isFavorite }
+            ImageDetailsAction.Button.SaveImage -> SavedGreen.takeIf { isImageSaved }
+            else -> null
+        }
+    val active = activeFill != null
     val corner by
         animateDpAsState(
             targetValue = if (active) ButtonCheckedCorner else ButtonCorner,
@@ -600,13 +626,14 @@ private fun ActionButton(
             label = "buttonCorner",
         )
     val container by
-        animateColorAsState(
-            if (active) FavoriteYellow else BlockColor,
-            label = "buttonContainer",
-        )
+        animateColorAsState(activeFill ?: BlockColor, label = "buttonContainer")
     val content by
         animateColorAsState(
-            if (active) Color.Black else MaterialTheme.colorScheme.onSurface,
+            when (activeFill) {
+                null -> MaterialTheme.colorScheme.onSurface
+                SavedGreen -> Color.White
+                else -> Color.Black
+            },
             label = "buttonContent",
         )
     Surface(
@@ -622,7 +649,7 @@ private fun ActionButton(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Icon(button.icon(isFavorite), contentDescription = null)
+            Icon(button.icon(isFavorite, isImageSaved), contentDescription = null)
             Text(button.label, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
         }
     }
@@ -634,28 +661,41 @@ private val ImageDetailsAction.Button.label: String
             when (this) {
                 ImageDetailsAction.Button.Favorite -> R.string.action_favorite
                 ImageDetailsAction.Button.ShowOnMap -> R.string.action_show_on_map
+                ImageDetailsAction.Button.Share -> R.string.action_share
+                ImageDetailsAction.Button.SaveImage -> R.string.action_save_image
                 ImageDetailsAction.Button.ViewOnWeb -> R.string.action_view_on_web
                 ImageDetailsAction.Button.Route -> R.string.action_find_route
             },
         )
 
-private fun ImageDetailsAction.Button.icon(isFavorite: Boolean): ImageVector =
+private fun ImageDetailsAction.Button.icon(
+    isFavorite: Boolean,
+    isImageSaved: Boolean,
+): ImageVector =
     when (this) {
         ImageDetailsAction.Button.Favorite ->
             if (isFavorite) Icons.Rounded.Star else Icons.Rounded.StarBorder
 
         ImageDetailsAction.Button.ShowOnMap -> Icons.Rounded.Place
+        ImageDetailsAction.Button.Share -> Icons.Rounded.Share
+        ImageDetailsAction.Button.SaveImage -> saveIcon(isImageSaved)
         ImageDetailsAction.Button.ViewOnWeb -> Icons.Rounded.Public
         ImageDetailsAction.Button.Route -> Icons.Rounded.Directions
     }
 
+/** iOS swaps `square.and.arrow.down` for its badged variant once the photo is in the library. */
+private fun saveIcon(isImageSaved: Boolean): ImageVector =
+    if (isImageSaved) Icons.Rounded.DownloadDone else Icons.Rounded.Download
+
 /**
- * The floating back chip over the photo (iOS `BackButton`, a glass circle). Both colours are named
+ * A floating chip over the photo (iOS `OverlayButton`, a glass circle). Both colours are named
  * explicitly: a translucent container is not a palette entry, so `Surface` couldn't derive a content
- * colour for it and the arrow kept the ambient one — black on a dark chip in the dark theme.
+ * colour for it and the icon kept the ambient one — black on a dark chip in the dark theme.
  */
 @Composable
-private fun BackButton(
+private fun OverlayButton(
+    icon: ImageVector,
+    contentDescription: String?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -668,11 +708,25 @@ private fun BackButton(
         shadowElevation = 3.dp,
     ) {
         Icon(
-            imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-            contentDescription = stringResource(R.string.back),
+            imageVector = icon,
+            contentDescription = contentDescription,
             modifier = Modifier.padding(8.dp),
         )
     }
+}
+
+/** iOS `BackButton`: the [OverlayButton] that dismisses the screen. */
+@Composable
+private fun BackButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    OverlayButton(
+        icon = Icons.AutoMirrored.Rounded.ArrowBack,
+        contentDescription = stringResource(R.string.back),
+        onClick = onClick,
+        modifier = modifier,
+    )
 }
 
 @Composable
@@ -724,6 +778,8 @@ private val MapApp.appName: String
 @Composable
 private fun FullscreenImage(
     image: ModelImage,
+    isImageSaved: Boolean,
+    onSave: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     // How deep the zoom goes. iOS stops at `max(image.size / frame.size)` — and `UIImage.size` is
@@ -758,16 +814,27 @@ private fun FullscreenImage(
         if (!imageState.isImageDisplayed && !imageState.isPlaceholderDisplayed) {
             CircularProgressIndicator(Modifier.align(Alignment.Center))
         }
+        // iOS `HStack { BackButton(); Spacer(); OverlayButton(save) }` over the photo.
         AnimatedVisibility(
             visible = !controlsHidden,
-            modifier = Modifier.align(Alignment.TopStart),
+            modifier = Modifier.align(Alignment.TopCenter),
             enter = fadeIn(),
             exit = fadeOut(),
         ) {
-            BackButton(
-                onClick = onDismiss,
-                modifier = Modifier.safeDrawingPadding().padding(8.dp),
-            )
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .safeDrawingPadding()
+                    .padding(8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                BackButton(onClick = onDismiss)
+                OverlayButton(
+                    icon = saveIcon(isImageSaved),
+                    contentDescription = stringResource(R.string.action_save_image),
+                    onClick = onSave,
+                )
+            }
         }
     }
 }

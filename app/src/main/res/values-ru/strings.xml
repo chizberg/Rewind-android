@@ -13,6 +13,8 @@
     <string name="label_address">адрес</string>
     <string name="action_favorite">Избранное</string>
     <string name="action_show_on_map">Показать на карте</string>
+    <string name="action_share">Поделиться</string>
+    <string name="action_save_image">Сохранить</string>
     <string name="action_view_on_web">На сайте</string>
     <string name="action_find_route">Маршрут</string>
     <string name="preview_no_images">Тут пока ничего нет</string>
