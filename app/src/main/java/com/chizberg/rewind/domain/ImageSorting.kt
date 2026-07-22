@@ -1,6 +1,10 @@
 package com.chizberg.rewind.domain
 
-/** Sort order for image lists. Port of iOS `ImageSorting`. */
+import kotlinx.serialization.Serializable
+
+/** Sort order for image lists. Port of iOS `ImageSorting` (a `Codable` enum); `@Serializable` so it
+ *  persists by name inside the settings blob. */
+@Serializable
 enum class ImageSorting {
     DateAscending,
     DateDescending,

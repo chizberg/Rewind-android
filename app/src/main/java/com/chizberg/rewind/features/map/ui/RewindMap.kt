@@ -26,6 +26,7 @@ import coil3.ImageLoader
 import com.chizberg.rewind.core.redux.Reducer
 import com.chizberg.rewind.domain.Coordinate
 import com.chizberg.rewind.domain.GradientScheme
+import com.chizberg.rewind.domain.ModelLocalCluster
 import com.chizberg.rewind.domain.Region
 import com.chizberg.rewind.domain.Span
 import com.chizberg.rewind.domain.zoom
@@ -95,6 +96,9 @@ fun RewindMap(
     focusRequests: Flow<CameraFocus>,
     onCardClick: (PreviewCard) -> Unit,
     onAnnotationClick: (AnnotationValue) -> Unit,
+    onLocalClusterClick: (ModelLocalCluster) -> Unit,
+    onFavoritesClick: () -> Unit,
+    onViewAsListClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val cameraPositionState =
@@ -161,13 +165,14 @@ fun RewindMap(
 
     val cameraScope = rememberCoroutineScope()
     // What a tap on an annotation does. An image opens its details (routed up to [onAnnotationClick]);
-    // a cluster zooms the camera in toward it — the iOS default when the "open cluster previews"
-    // setting is off (that opt-in setting lands in M13). Local clusters have no image-list screen yet
-    // (M10), so they zoom in too — de-clustering is a reasonable stand-in until the list exists.
+    // a local cluster opens its images as the "Cluster" grid list (routed up to [onLocalClusterClick],
+    // the iOS default for a local cluster); a server cluster zooms the camera in toward it — the iOS
+    // default when the "open cluster previews" setting is off (that opt-in setting lands in M13).
     val onAnnotationTapped: (AnnotationValue) -> Unit = { annotation ->
         when (annotation) {
             is AnnotationValue.Image -> onAnnotationClick(annotation)
-            is AnnotationValue.Cluster, is AnnotationValue.LocalCluster ->
+            is AnnotationValue.LocalCluster -> onLocalClusterClick(annotation.value)
+            is AnnotationValue.Cluster ->
                 cameraScope.launch {
                     cameraPositionState.animate(
                         CameraUpdateFactory.newLatLngZoom(
@@ -231,6 +236,8 @@ fun RewindMap(
             scheme = scheme,
             maxRange = maxRange,
             onCardClick = onCardClick,
+            onFavoritesClick = onFavoritesClick,
+            onViewAsListClick = onViewAsListClick,
             modifier =
                 Modifier
                     .align(Alignment.BottomCenter)

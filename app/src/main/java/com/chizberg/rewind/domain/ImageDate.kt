@@ -1,9 +1,15 @@
 package com.chizberg.rewind.domain
 
+import kotlinx.serialization.Serializable
+
 /**
  * Time span of an image: `[year, year2]`. Port of iOS `ImageDate`.
  * Comparable lexicographically by (year, year2).
+ *
+ * `@Serializable` for the M10 persistence DTO `StorageImage` (kotlinx.serialization only, no
+ * android.* — the JVM-only rule for domain types still holds).
  */
+@Serializable
 data class ImageDate(
     val year: Int,
     val year2: Int,

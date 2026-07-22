@@ -19,4 +19,12 @@
     <string name="action_find_route">Бағыт табу</string>
     <string name="preview_no_images">Әзірше бұл жерде ештеңе жоқ</string>
     <string name="preview_view_as_list">Тізім түрінде көру</string>
+    <string name="list_favorites">Таңдаулылар</string>
+    <string name="list_on_the_map">Картада</string>
+    <string name="cluster">Суреттер тобы</string>
+    <string name="list_empty">Әзірше бұл жерде ештеңе жоқ</string>
+    <string name="sorting">Сұрыптау</string>
+    <string name="sort_date_ascending">Күні бойынша (ескіден жаңаға)</string>
+    <string name="sort_date_descending">Жаңадан ескіге</string>
+    <string name="sort_shuffle">Араластыру</string>
 </resources>

@@ -19,4 +19,12 @@
     <string name="action_find_route">Знайти маршрут</string>
     <string name="preview_no_images">Тут поки нічого немає</string>
     <string name="preview_view_as_list">Переглянути списком</string>
+    <string name="list_favorites">Улюблене</string>
+    <string name="list_on_the_map">На карті</string>
+    <string name="cluster">Група зображень</string>
+    <string name="list_empty">Тут поки нічого немає</string>
+    <string name="sorting">Сортування</string>
+    <string name="sort_date_ascending">Спочатку старіші</string>
+    <string name="sort_date_descending">Спочатку новіші</string>
+    <string name="sort_shuffle">Перемішати</string>
 </resources>

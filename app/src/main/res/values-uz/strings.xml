@@ -19,4 +19,12 @@
     <string name="action_find_route">Yo\'nalishni topish</string>
     <string name="preview_no_images">Bu yerda hali hech narsa yo\'q</string>
     <string name="preview_view_as_list">Roʻyxat koʻrinishida koʻrish</string>
+    <string name="list_favorites">Sevimlilar</string>
+    <string name="list_on_the_map">Xaritada</string>
+    <string name="cluster">Klaster</string>
+    <string name="list_empty">Bu yerda hali hech narsa yo\'q</string>
+    <string name="sorting">Saralash</string>
+    <string name="sort_date_ascending">Sana bo\'yicha (eskidan yangiga)</string>
+    <string name="sort_date_descending">Avval yangilari</string>
+    <string name="sort_shuffle">Aralashtirish</string>
 </resources>

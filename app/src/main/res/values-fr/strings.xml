@@ -19,4 +19,12 @@
     <string name="action_find_route">Trouver l\'itinéraire</string>
     <string name="preview_no_images">Rien ici pour l\'instant</string>
     <string name="preview_view_as_list">Afficher en liste</string>
+    <string name="list_favorites">Favoris</string>
+    <string name="list_on_the_map">Sur la carte</string>
+    <string name="cluster">Groupe</string>
+    <string name="list_empty">Rien ici pour l\'instant</string>
+    <string name="sorting">Tri</string>
+    <string name="sort_date_ascending">Date croissante</string>
+    <string name="sort_date_descending">Plus récentes d\'abord</string>
+    <string name="sort_shuffle">Aléatoire</string>
 </resources>

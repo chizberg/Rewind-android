@@ -20,4 +20,12 @@
     <string name="action_find_route">Find route</string>
     <string name="preview_no_images">Nothing here yet</string>
     <string name="preview_view_as_list">View as List</string>
+    <string name="list_favorites">Favorites</string>
+    <string name="list_on_the_map">On the map</string>
+    <string name="cluster">Cluster</string>
+    <string name="list_empty">Nothing here yet</string>
+    <string name="sorting">Sorting</string>
+    <string name="sort_date_ascending">Date Ascending</string>
+    <string name="sort_date_descending">Date Descending</string>
+    <string name="sort_shuffle">Shuffle</string>
 </resources>

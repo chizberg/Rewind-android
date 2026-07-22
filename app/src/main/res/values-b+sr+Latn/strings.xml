@@ -19,4 +19,12 @@
     <string name="action_find_route">Pronađi rutu</string>
     <string name="preview_no_images">Ovde još nema ničega</string>
     <string name="preview_view_as_list">Prikaži kao listu</string>
+    <string name="list_favorites">Omiljeno</string>
+    <string name="list_on_the_map">Na karti</string>
+    <string name="cluster">Grupa slika</string>
+    <string name="list_empty">Ovde još nema ničega</string>
+    <string name="sorting">Sortiranje</string>
+    <string name="sort_date_ascending">Datum rastuće</string>
+    <string name="sort_date_descending">Od novijeg ka starijem</string>
+    <string name="sort_shuffle">Promešaj</string>
 </resources>

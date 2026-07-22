@@ -1,5 +1,6 @@
 package com.chizberg.rewind.domain
 
+import kotlinx.serialization.Serializable
 import kotlin.math.abs
 import kotlin.math.floor
 
@@ -8,7 +9,11 @@ import kotlin.math.floor
  * com.google.* types (own [Coordinate]/[Region]); conversion to LatLng happens only
  * at the UI boundary. Port of iOS `Coordinate` (typealias for CLLocationCoordinate2D)
  * in MapKit+Extensions.swift.
+ *
+ * `@Serializable` (kotlinx.serialization, not android.*) so it can appear as a field of the M10
+ * persistence DTO `StorageImage` — does not violate the JVM-only rule.
  */
+@Serializable
 data class Coordinate(
     val latitude: Double,
     val longitude: Double,

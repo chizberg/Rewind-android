@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -22,6 +23,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.FormatListBulleted
+import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -45,9 +47,10 @@ import com.chizberg.rewind.ui.toComposeColor
  * the bottom screen edge — where the device's own screen corner clips it, so its bottom corners are
  * concentric with the display for free on every device — and only its top corners are rounded. Its
  * background extends behind the navigation bar while the cards are inset above the home indicator.
- * Drag-minimize and the fixed favorites/list/settings buttons land with their later milestones; M8
- * carries the strip itself — cards, the "no images" / "view as list" placeholders, and the loading
- * spinner. Cards are tinted by year via [scheme] over [maxRange] (mirrors the map annotations). */
+ * A fixed leading column carries the favorites (star) and view-as-list buttons (iOS
+ * `MapControls.makeBottomScrollButton`), each an entry into a full-screen grid list; the settings
+ * button and the drag-minimize gesture land with their later milestones (M13 / M16). Cards are
+ * tinted by year via [scheme] over [maxRange] (mirrors the map annotations). */
 @Composable
 fun PreviewStrip(
     previews: List<PreviewCard>,
@@ -55,6 +58,8 @@ fun PreviewStrip(
     scheme: GradientScheme,
     maxRange: IntRange,
     onCardClick: (PreviewCard) -> Unit,
+    onFavoritesClick: () -> Unit,
+    onViewAsListClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -92,6 +97,13 @@ fun PreviewStrip(
                         bottom = StripBottomPadding,
                     ),
             ) {
+                item(key = "controls") {
+                    StripControls(
+                        onFavoritesClick = onFavoritesClick,
+                        onViewAsListClick = onViewAsListClick,
+                        modifier = Modifier.height(CardHeight),
+                    )
+                }
                 items(previews, key = { it.id }) { card ->
                     ThumbnailCard(
                         card = card,
@@ -114,6 +126,56 @@ fun PreviewStrip(
                     strokeWidth = 2.dp,
                 )
             }
+        }
+    }
+}
+
+/**
+ * The strip's fixed leading controls: favorites (star) above view-as-list, each opening a
+ * full-screen grid list. Port of the iOS `MapControls` leading button column (minus the settings
+ * button, which lands with Settings in M13). Sized to the card's footprint so it reads as part of
+ * the row.
+ */
+@Composable
+private fun StripControls(
+    onFavoritesClick: () -> Unit,
+    onViewAsListClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.width(ControlWidth),
+        verticalArrangement = Arrangement.spacedBy(CardSpacing),
+    ) {
+        StripControlButton(
+            icon = Icons.Rounded.Star,
+            contentDescription = stringResource(R.string.list_favorites),
+            onClick = onFavoritesClick,
+            modifier = Modifier.weight(1f),
+        )
+        StripControlButton(
+            icon = Icons.AutoMirrored.Rounded.FormatListBulleted,
+            contentDescription = stringResource(R.string.preview_view_as_list),
+            onClick = onViewAsListClick,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+@Composable
+private fun StripControlButton(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(CardCorner),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+    ) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = contentDescription, modifier = Modifier.size(IconSize))
         }
     }
 }
@@ -204,9 +266,14 @@ private fun PlaceholderContent(
     }
 }
 
-private val CardWidth = 200.dp
-private val CardHeight = 150.dp
+// Matches iOS `thumbnailSize` (250 x 187.5, 4:3) — the strip cards read a touch larger than the
+// earlier 200 x 150 and now line up with the iOS preview strip side by side.
+private val CardWidth = 250.dp
+private val CardHeight = 187.5.dp
 private val CardSpacing = 8.dp
+
+// The leading control column's width — narrower than a card since it only carries stacked icons.
+private val ControlWidth = 56.dp
 
 // Padding around the cards inside the strip (iOS `glassCardPadding`); the bottom gap is a touch
 // smaller since the sheet already floats above the home indicator.

@@ -19,4 +19,12 @@
     <string name="action_find_route">Route finden</string>
     <string name="preview_no_images">Hier ist noch nichts</string>
     <string name="preview_view_as_list">Als Liste anzeigen</string>
+    <string name="list_favorites">Favoriten</string>
+    <string name="list_on_the_map">Auf der Karte</string>
+    <string name="cluster">Bildergruppe</string>
+    <string name="list_empty">Hier ist noch nichts</string>
+    <string name="sorting">Sortierung</string>
+    <string name="sort_date_ascending">Datum aufsteigend</string>
+    <string name="sort_date_descending">Neueste zuerst</string>
+    <string name="sort_shuffle">Zufällig</string>
 </resources>

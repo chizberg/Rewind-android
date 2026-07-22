@@ -96,6 +96,9 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
+    // M10: Favorites/JsonPreference persistence (androidx.datastore:datastore-preferences-core is
+    // the JVM/multiplatform artifact — works off java.io.File, no Context — see plan.md §5).
+    implementation(libs.androidx.datastore.preferences.core)
     implementation(libs.okhttp)
     implementation(libs.maps.compose)
     implementation(libs.play.services.maps)

@@ -1,8 +1,13 @@
 package com.chizberg.rewind.domain
 
+import kotlinx.serialization.Serializable
+
 /**
  * Photo shooting direction (8 rhumbs + aero). Port of iOS `Direction`.
+ *
+ * `@Serializable` for the M10 persistence DTO `StorageImage`.
  */
+@Serializable
 enum class Direction {
     N,
     E,

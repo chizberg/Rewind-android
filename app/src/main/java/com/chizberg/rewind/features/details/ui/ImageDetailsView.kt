@@ -92,7 +92,7 @@ import com.chizberg.rewind.features.map.ui.rememberRewindImageRequest
 import com.chizberg.rewind.network.ImageQuality
 import com.chizberg.rewind.ui.DirectionBadge
 import com.chizberg.rewind.ui.ImageDateBadge
-import com.chizberg.rewind.ui.OverlayScreen
+import com.chizberg.rewind.ui.Overlay
 import me.saket.telephoto.zoomable.ZoomSpec
 import me.saket.telephoto.zoomable.coil3.ZoomableAsyncImage
 import me.saket.telephoto.zoomable.rememberZoomableImageState
@@ -207,8 +207,9 @@ fun ImageDetailsView(
     }
 
     // The viewer is a layer, not a dialog (see [FullscreenImage]), so back closes it before the
-    // screen under it — its handler registers later, and the dispatcher is LIFO.
-    OverlayScreen(
+    // screen under it — its handler registers later, and the dispatcher is LIFO. The details recede
+    // behind it automatically ([OverlayHost]).
+    Overlay(
         target = state.image.takeIf { state.fullscreenPresented },
         onBack = { model(ImageDetailsAction.FullscreenPreview.Dismiss) },
     ) { shown ->
@@ -236,8 +237,8 @@ fun ImageDetailsView(
     }
 
     // Recursion: a pastvu-link tap presents the linked photo as a full-screen screen on top. Its own
-    // OverlayScreen composes after ours, so the back dispatcher (LIFO) gives it the gesture first.
-    OverlayScreen(
+    // Overlay layer stacks above ours (LIFO back), and our details recede behind it ([OverlayHost]).
+    Overlay(
         target = state.anotherImageModel,
         onBack = { model(ImageDetailsAction.AnotherImage.Dismiss) },
     ) { nested ->

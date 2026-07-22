@@ -16,10 +16,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.chizberg.rewind.R
 import com.chizberg.rewind.features.details.ui.ImageDetailsView
+import com.chizberg.rewind.features.imagelist.ui.ImageListView
 import com.chizberg.rewind.features.map.AnnotationValue
+import com.chizberg.rewind.features.map.PreviewCard
 import com.chizberg.rewind.features.map.ui.LocalRewindImageLoader
 import com.chizberg.rewind.features.map.ui.RewindMap
-import com.chizberg.rewind.ui.OverlayScreen
+import com.chizberg.rewind.ui.Overlay
+import com.chizberg.rewind.ui.OverlayHost
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
@@ -35,8 +38,9 @@ private const val THUMBNAIL_SOURCE = "thumbnail"
  * `rememberCameraPositionState` is `rememberSaveable`).
  *
  * [RewindMap] is composed here permanently, never as a navigation destination, and overlays are
- * plain conditional composables on top of it ([OverlayScreen] owns their animation and the system
- * back gesture). This is deliberate and was paid for once: hosting the map as the root entry of a
+ * declared through [OverlayHost]/[Overlay] on top of it (the host owns their animation, the receding
+ * of the layer below, and the system back gesture). This is deliberate and was paid for once:
+ * hosting the map as the root entry of a
  * `NavDisplay` back stack looks equivalent but is not — the default single-pane scene treats only
  * the top entry as current, so the map's `MapView` was destroyed and rebuilt on every details open.
  * That re-requested tiles, re-ran clustering and icon rasterisation, and re-played every pin's
@@ -66,38 +70,64 @@ fun RootView(modifier: Modifier = Modifier) {
         )
 
     CompositionLocalProvider(LocalRewindImageLoader provides graph.imageLoader) {
-        // The map is the overlay's background: always composed (never a navigation destination, so
-        // its MapView is never torn down), and scaled back by OverlayScreen behind an open details
-        // screen for the system-style peek.
-        OverlayScreen(
-            target = appState.previewedImage,
-            onBack = { graph.appModel(AppAction.ImageDetails.Dismiss) },
-            modifier = modifier.fillMaxSize(),
-            background = {
+        // The map is the permanent base of the overlay stack: always composed (never a navigation
+        // destination, so its MapView is never torn down), receded behind whatever opens over it.
+        // Every overlay is declared through [OverlayHost]/[Overlay], so the receding of the layer
+        // below (map behind list/details, list behind its own details) and the back gesture are the
+        // host's job — there is no per-overlay background slot left to forget.
+        OverlayHost(
+            modifier = modifier,
+            base = {
                 RewindMap(
                     mapModel = graph.mapModel,
                     imageLoader = graph.imageLoader,
                     scheme = appState.gradientScheme,
                     focusRequests = graph.focusRequests,
-                    onCardClick = { card ->
-                        card.image?.let {
-                            graph.appModel(AppAction.ImageDetails.Present(it, THUMBNAIL_SOURCE))
-                        }
-                    },
+                    onCardClick = { card -> presentCard(card) { graph.appModel(it) } },
                     onAnnotationClick = { annotation ->
                         presentAnnotation(annotation) { graph.appModel(it) }
+                    },
+                    onLocalClusterClick = { cluster ->
+                        graph.appModel(
+                            AppAction.ImageList.Present(cluster.images, R.string.cluster),
+                        )
+                    },
+                    onFavoritesClick = { graph.appModel(AppAction.ImageList.PresentFavorites) },
+                    onViewAsListClick = {
+                        graph.appModel(AppAction.ImageList.PresentCurrentRegionImages)
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
             },
-        ) { details ->
-            ImageDetailsView(
-                model = details,
-                scheme = appState.gradientScheme,
-                maxRange = maxRange,
-                onDismiss = { graph.appModel(AppAction.ImageDetails.Dismiss) },
-            )
-        }
+            overlays = {
+                // Pin-opened details and the list are mutually-exclusive layers over the map; each
+                // recedes the map automatically. Details opened from inside the list stack one higher
+                // still (declared inside [ImageListView]).
+                Overlay(
+                    target = appState.previewedImage,
+                    onBack = { graph.appModel(AppAction.ImageDetails.Dismiss) },
+                ) { details ->
+                    ImageDetailsView(
+                        model = details,
+                        scheme = appState.gradientScheme,
+                        maxRange = maxRange,
+                        onDismiss = { graph.appModel(AppAction.ImageDetails.Dismiss) },
+                    )
+                }
+
+                Overlay(
+                    target = appState.previewedList,
+                    onBack = { graph.appModel(AppAction.ImageList.Dismiss) },
+                ) { listModel ->
+                    ImageListView(
+                        model = listModel,
+                        scheme = appState.gradientScheme,
+                        maxRange = maxRange,
+                        onDismiss = { graph.appModel(AppAction.ImageList.Dismiss) },
+                    )
+                }
+            },
+        )
 
         appState.alert?.let { params ->
             AlertDialog(
@@ -123,9 +153,25 @@ fun RootView(modifier: Modifier = Modifier) {
 }
 
 /**
- * Routes a tapped image annotation to its details screen. Only images reach here — cluster taps are
- * handled by the map itself (zoom-in, see [RewindMap]); the server-cluster preview and local-cluster
- * image-list routes land with the "open cluster previews" setting (M13) and the image list (M10).
+ * Routes a tapped preview card: an image opens its details; the trailing "view as list" card opens
+ * the current-region list; the "no images" placeholder does nothing.
+ */
+private fun presentCard(
+    card: PreviewCard,
+    dispatch: (AppAction) -> Unit,
+) {
+    when (card) {
+        is PreviewCard.Image ->
+            dispatch(AppAction.ImageDetails.Present(card.value, THUMBNAIL_SOURCE))
+        PreviewCard.ViewAsList -> dispatch(AppAction.ImageList.PresentCurrentRegionImages)
+        PreviewCard.NoImages -> Unit
+    }
+}
+
+/**
+ * Routes a tapped image annotation to its details screen. Only images reach here — a server cluster
+ * zooms the map in ([RewindMap]) and a local cluster opens the "Cluster" list (`onLocalClusterClick`);
+ * the server-cluster preview route lands with the "open cluster previews" setting (M13).
  */
 private fun presentAnnotation(
     annotation: AnnotationValue,

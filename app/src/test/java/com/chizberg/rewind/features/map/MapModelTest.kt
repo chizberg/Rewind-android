@@ -507,12 +507,6 @@ class MapModelTest {
         TODO("mirror iOS once the controls minimization/unfold land")
     }
 
-    @Ignore("annotation selection routing not ported yet")
-    @Test
-    fun annotationSelectionRoutesByType() {
-        TODO("mirror iOS once annotationSelected + image details/list land")
-    }
-
     @Ignore("focusOn action not ported yet")
     @Test
     fun focusOnRecentersAndReloads() {

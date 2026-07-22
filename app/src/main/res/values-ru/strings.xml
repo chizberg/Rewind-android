@@ -19,4 +19,12 @@
     <string name="action_find_route">Маршрут</string>
     <string name="preview_no_images">Тут пока ничего нет</string>
     <string name="preview_view_as_list">Открыть списком</string>
+    <string name="list_favorites">Избранное</string>
+    <string name="list_on_the_map">На карте</string>
+    <string name="cluster">Кластер</string>
+    <string name="list_empty">Тут пока ничего нет</string>
+    <string name="sorting">Сортировка</string>
+    <string name="sort_date_ascending">Сначала старые</string>
+    <string name="sort_date_descending">Сначала новые</string>
+    <string name="sort_shuffle">Перемешать</string>
 </resources>
