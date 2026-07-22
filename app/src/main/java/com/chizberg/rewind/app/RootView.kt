@@ -59,15 +59,17 @@ fun RootView(modifier: Modifier = Modifier) {
     val appState by graph.appModel.state.collectAsStateWithLifecycle()
     val clipboard = LocalClipboardManager.current
     // The year-tint range tracks the selected image kind; collected distinctly so a photo/painting
-    // switch (rare) recomposes the overlay, but per-frame annotation churn does not.
+    // switch (rare) recomposes the overlay, but per-frame annotation churn does not. The seed is read
+    // once inside `remember` (a non-`@Composable` lambda, so off-composition) — reading `state.value`
+    // directly in composition would be an unsubscribed read (Compose lint), and this level must NOT
+    // subscribe to the full map state.
+    val initialMaxRange = remember(graph) { graph.mapModel.state.value.filters.imageKind.maxRange }
     val maxRange by
         remember(graph) {
             graph.mapModel.state
                 .map { it.filters.imageKind.maxRange }
                 .distinctUntilChanged()
-        }.collectAsStateWithLifecycle(
-            initialValue = graph.mapModel.state.value.filters.imageKind.maxRange,
-        )
+        }.collectAsStateWithLifecycle(initialValue = initialMaxRange)
 
     CompositionLocalProvider(LocalRewindImageLoader provides graph.imageLoader) {
         // The map is the permanent base of the overlay stack: always composed (never a navigation
