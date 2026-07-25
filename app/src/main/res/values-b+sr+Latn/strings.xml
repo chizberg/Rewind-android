@@ -23,8 +23,13 @@
     <string name="list_on_the_map">Na karti</string>
     <string name="cluster">Grupa slika</string>
     <string name="list_empty">Ovde još nema ničega</string>
+    <string name="image_kind_photos">Fotografije</string>
+    <string name="image_kind_paintings">Slike</string>
     <string name="sorting">Sortiranje</string>
     <string name="sort_date_ascending">Datum rastuće</string>
     <string name="sort_date_descending">Od novijeg ka starijem</string>
     <string name="sort_shuffle">Promešaj</string>
+    <string name="year_range">Raspon godina</string>
+    <string name="year_range_start">Početna godina</string>
+    <string name="year_range_end">Krajnja godina</string>
 </resources>

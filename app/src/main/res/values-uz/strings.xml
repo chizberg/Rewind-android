@@ -23,8 +23,13 @@
     <string name="list_on_the_map">Xaritada</string>
     <string name="cluster">Klaster</string>
     <string name="list_empty">Bu yerda hali hech narsa yo\'q</string>
+    <string name="image_kind_photos">Fotosuratlar</string>
+    <string name="image_kind_paintings">Rasmlar</string>
     <string name="sorting">Saralash</string>
     <string name="sort_date_ascending">Sana bo\'yicha (eskidan yangiga)</string>
     <string name="sort_date_descending">Avval yangilari</string>
     <string name="sort_shuffle">Aralashtirish</string>
+    <string name="year_range">Yillar oralig\'i</string>
+    <string name="year_range_start">Boshlanish yili</string>
+    <string name="year_range_end">Tugash yili</string>
 </resources>

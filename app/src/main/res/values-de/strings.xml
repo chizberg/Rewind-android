@@ -23,8 +23,13 @@
     <string name="list_on_the_map">Auf der Karte</string>
     <string name="cluster">Bildergruppe</string>
     <string name="list_empty">Hier ist noch nichts</string>
+    <string name="image_kind_photos">Fotos</string>
+    <string name="image_kind_paintings">Gemälde</string>
     <string name="sorting">Sortierung</string>
     <string name="sort_date_ascending">Datum aufsteigend</string>
     <string name="sort_date_descending">Neueste zuerst</string>
     <string name="sort_shuffle">Zufällig</string>
+    <string name="year_range">Jahresbereich</string>
+    <string name="year_range_start">Startjahr</string>
+    <string name="year_range_end">Endjahr</string>
 </resources>

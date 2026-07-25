@@ -77,6 +77,9 @@ fun makeMapModel(
                 state.copy(filters = newFilters)
             }
 
+            is MapAction.External.Ui.Controls.SetExpandedItems ->
+                state.copy(controls = state.controls.copy(expandedItems = action.items))
+
             is MapAction.Internal.RegionChanged -> {
                 asyncEffect(AsyncEffect.anotherAction(action = MapAction.Internal.LoadAnnotations))
                 asyncEffect(

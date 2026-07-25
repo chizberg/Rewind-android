@@ -23,8 +23,13 @@
     <string name="list_on_the_map">Картада</string>
     <string name="cluster">Суреттер тобы</string>
     <string name="list_empty">Әзірше бұл жерде ештеңе жоқ</string>
+    <string name="image_kind_photos">Фотосуреттер</string>
+    <string name="image_kind_paintings">Картиналар</string>
     <string name="sorting">Сұрыптау</string>
     <string name="sort_date_ascending">Күні бойынша (ескіден жаңаға)</string>
     <string name="sort_date_descending">Жаңадан ескіге</string>
     <string name="sort_shuffle">Араластыру</string>
+    <string name="year_range">Жылдар аралығы</string>
+    <string name="year_range_start">Бастапқы жыл</string>
+    <string name="year_range_end">Соңғы жыл</string>
 </resources>

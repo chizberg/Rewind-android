@@ -23,8 +23,13 @@
     <string name="list_on_the_map">На карте</string>
     <string name="cluster">Кластер</string>
     <string name="list_empty">Тут пока ничего нет</string>
+    <string name="image_kind_photos">Фото</string>
+    <string name="image_kind_paintings">Картины</string>
     <string name="sorting">Сортировка</string>
     <string name="sort_date_ascending">Сначала старые</string>
     <string name="sort_date_descending">Сначала новые</string>
     <string name="sort_shuffle">Перемешать</string>
+    <string name="year_range">Диапазон лет</string>
+    <string name="year_range_start">Начальный год</string>
+    <string name="year_range_end">Конечный год</string>
 </resources>

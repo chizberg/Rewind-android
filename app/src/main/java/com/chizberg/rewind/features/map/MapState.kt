@@ -9,8 +9,17 @@ import com.chizberg.rewind.domain.Span
 import com.chizberg.rewind.network.AnnotationLoadingParams
 
 /**
+ * A control in the map's floating menu that can be expanded in place. Port of iOS
+ * `FloatingMenu.Item`, trimmed to the expandable ones: iOS marks only the time picker `.expandable`
+ * (map type / image kind / search / location are `.fixed`), so only it needs identity in state.
+ */
+enum class MapControlItem {
+    TimePicker,
+}
+
+/**
  * The map screen's state. Port of iOS `MapState`, trimmed to what is ported so far (clustering,
- * loading, previews); controls, map type and location state arrive with their later milestones.
+ * loading, previews); map type and location state arrive with their later milestones.
  *
  * Divergence from iOS: carries [zoom] explicitly. iOS reconstructs zoom from the region span via
  * the map size; we read Google Maps' camera zoom directly (see Zoom.kt), so `regionChanged` brings
@@ -36,7 +45,17 @@ data class MapState(
     // The local-clustering grid cell's longitude span, held fixed for the whole rounded-zoom bucket
     // (LocalClustering recomputes it only when the bucket changes). 0.0 until the first load.
     val clusteringCellSpan: Double = 0.0,
+    // The floating controls' own state (iOS `MapState.controls`).
+    val controls: ControlsState = ControlsState(),
 ) {
+    /**
+     * The floating controls' view state. Port of iOS `MapState.ControlsState`, trimmed to the
+     * expansion set; `minimization` (drag-to-hide) and `size` arrive with their milestones.
+     */
+    data class ControlsState(
+        val expandedItems: Set<MapControlItem> = emptySet(),
+    )
+
     /**
      * The full set of renderable annotations projected from [clusters] + [clusteredImages]. This is
      * the declarative-render source of truth: the map draws exactly these (replacing iOS's

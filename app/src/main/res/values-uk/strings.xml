@@ -23,8 +23,13 @@
     <string name="list_on_the_map">На карті</string>
     <string name="cluster">Група зображень</string>
     <string name="list_empty">Тут поки нічого немає</string>
+    <string name="image_kind_photos">Фото</string>
+    <string name="image_kind_paintings">Картини</string>
     <string name="sorting">Сортування</string>
     <string name="sort_date_ascending">Спочатку старіші</string>
     <string name="sort_date_descending">Спочатку новіші</string>
     <string name="sort_shuffle">Перемішати</string>
+    <string name="year_range">Діапазон років</string>
+    <string name="year_range_start">Початковий рік</string>
+    <string name="year_range_end">Кінцевий рік</string>
 </resources>

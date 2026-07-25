@@ -3,8 +3,16 @@ package com.chizberg.rewind.features.map.ui
 import android.graphics.Bitmap
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -78,6 +86,9 @@ private const val CLUSTER_ZOOM_STEP = 1f
 // First-frame guess for the strip's height, used until it reports its measured size (avoids a
 // visible marker/logo jump on the first layout). Real height replaces it once the strip is laid out.
 private val InitialStripHeight = 210.dp
+
+// Gap between the floating filter toolbar and the preview strip below it.
+private val FiltersGap = 8.dp
 
 /**
  * The map surface. Port of iOS `RewindMap`. Each camera idle hands the visible region + zoom to
@@ -230,19 +241,49 @@ fun RewindMap(
             iconPipeline = iconPipeline,
             contentPaddingBottom = stripHeight,
         )
-        PreviewStrip(
-            previews = state.previews,
-            isLoading = state.isLoading,
-            scheme = scheme,
-            maxRange = maxRange,
-            onCardClick = onCardClick,
-            onFavoritesClick = onFavoritesClick,
-            onViewAsListClick = onViewAsListClick,
-            modifier =
-                Modifier
-                    .align(Alignment.BottomCenter)
-                    .onSizeChanged { stripHeight = with(localDensity) { it.height.toDp() } },
-        )
+        // The floating filter toolbar sits directly above the preview strip (port of the iOS
+        // FloatingMenu row over the bottom card); both are pinned to the bottom edge as one column.
+        // The strip still reports only its own height back for the map padding + marker placement.
+        // Leading-aligned, like iOS `MapControls`' `VStack(alignment: .leading)`: once the toolbar
+        // stops filling the width (landscape, where it caps out) it hugs the side rather than
+        // floating in the middle of the map.
+        Column(
+            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+            horizontalAlignment = Alignment.Start,
+        ) {
+            FiltersControl(
+                filters = state.filters,
+                scheme = scheme,
+                expandedItems = state.controls.expandedItems,
+                onFiltersChanged = { mapModel(MapAction.External.Ui.FiltersChanged(it)) },
+                onExpandedItemsChanged = {
+                    mapModel(
+                        MapAction.External.Ui.Controls
+                            .SetExpandedItems(it),
+                    )
+                },
+                // Side insets stay inside FiltersControl (they belong to the animated node there —
+                // see its expansion comment); only the gap above the strip is set here.
+                modifier =
+                    Modifier
+                        .windowInsetsPadding(
+                            WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal),
+                        ).padding(vertical = FiltersGap),
+            )
+            PreviewStrip(
+                previews = state.previews,
+                isLoading = state.isLoading,
+                scheme = scheme,
+                maxRange = maxRange,
+                onCardClick = onCardClick,
+                onFavoritesClick = onFavoritesClick,
+                onViewAsListClick = onViewAsListClick,
+                modifier =
+                    Modifier.onSizeChanged {
+                        stripHeight = with(localDensity) { it.height.toDp() }
+                    },
+            )
+        }
     }
 }
 

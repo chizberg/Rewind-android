@@ -7,9 +7,9 @@ import com.chizberg.rewind.domain.Region
 import com.chizberg.rewind.network.AnnotationLoadingParams
 
 /**
- * Actions for [makeMapModel]. Port of iOS `MapAction`, trimmed to M6 (region loading + filters);
- * annotation selection, location, map type and controls arrive with their later milestones. The
- * External.Map / External.Ui / Internal nesting mirrors iOS so both codebases read in parallel.
+ * Actions for [makeMapModel]. Port of iOS `MapAction`, trimmed to the region loading + filters +
+ * controls scope; annotation selection, location and map type arrive with their later milestones.
+ * The External.Map / External.Ui / Internal nesting mirrors iOS so both codebases read in parallel.
  */
 sealed interface MapAction {
     sealed interface External : MapAction {
@@ -30,6 +30,13 @@ sealed interface MapAction {
             data class FiltersChanged(
                 val filters: ImageRequestFilters,
             ) : Ui
+
+            /** Port of iOS `MapAction.External.UI.controls`, trimmed to the expansion set. */
+            sealed interface Controls : Ui {
+                data class SetExpandedItems(
+                    val items: Set<MapControlItem>,
+                ) : Controls
+            }
         }
     }
 
