@@ -110,6 +110,7 @@ fun RewindMap(
     onLocalClusterClick: (ModelLocalCluster) -> Unit,
     onFavoritesClick: () -> Unit,
     onViewAsListClick: () -> Unit,
+    onSearchClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val cameraPositionState =
@@ -241,17 +242,17 @@ fun RewindMap(
             iconPipeline = iconPipeline,
             contentPaddingBottom = stripHeight,
         )
-        // The floating filter toolbar sits directly above the preview strip (port of the iOS
-        // FloatingMenu row over the bottom card); both are pinned to the bottom edge as one column.
-        // The strip still reports only its own height back for the map padding + marker placement.
-        // Leading-aligned, like iOS `MapControls`' `VStack(alignment: .leading)`: once the toolbar
+        // The floating menu sits directly above the preview strip (port of the iOS FloatingMenu row
+        // over the bottom card); both are pinned to the bottom edge as one column. The strip still
+        // reports only its own height back for the map padding + marker placement.
+        // Leading-aligned, like iOS `MapControls`' `VStack(alignment: .leading)`: once the menu
         // stops filling the width (landscape, where it caps out) it hugs the side rather than
         // floating in the middle of the map.
         Column(
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
             horizontalAlignment = Alignment.Start,
         ) {
-            FiltersControl(
+            FloatingMenu(
                 filters = state.filters,
                 scheme = scheme,
                 expandedItems = state.controls.expandedItems,
@@ -262,7 +263,10 @@ fun RewindMap(
                             .SetExpandedItems(it),
                     )
                 },
-                // Side insets stay inside FiltersControl (they belong to the animated node there —
+                // iOS routes the search glyph to `AppAction.search(.present)`, not to the map
+                // reducer — so does this one, through the root view.
+                onSearchClick = onSearchClick,
+                // Side insets stay inside FloatingMenu (they belong to the animated node there —
                 // see its expansion comment); only the gap above the strip is set here.
                 modifier =
                     Modifier

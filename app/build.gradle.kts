@@ -102,6 +102,10 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.maps.compose)
     implementation(libs.play.services.maps)
+    // M12: place search — Places SDK for Android (New): autocomplete predictions + fetchPlace,
+    // billed per session token. Runs on the same MAPS_API_KEY as the map (see
+    // secrets.defaults.properties), so no new secret is introduced.
+    implementation(libs.places)
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
     // The full-screen photo viewer (M9's "telephoto or hand-rolled" call): pan bounded to the

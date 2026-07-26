@@ -2,6 +2,9 @@ package com.chizberg.rewind.features.map.ui
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -16,6 +19,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -28,6 +32,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Brush
 import androidx.compose.material.icons.rounded.Brush
 import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
@@ -73,12 +78,19 @@ import kotlin.math.roundToInt
 import androidx.compose.ui.graphics.Brush as GradientBrush
 
 /**
- * The map's filter chrome: a toolbar row with the year-picker toggle and the photo/painting switch,
- * plus the year selector that expands underneath it. Changes are dispatched up as
- * [com.chizberg.rewind.features.map.MapAction.External.Ui.FiltersChanged] /
- * [com.chizberg.rewind.features.map.MapAction.External.Ui.Controls.SetExpandedItems]. Port of iOS
- * `FloatingMenu` trimmed to the filters scope — the map-type, search and location buttons arrive
- * with their milestones.
+ * The map's floating menu: the filter controls (year-picker toggle, photo/painting switch) and the
+ * place-search button, plus the year selector that expands underneath. Filter changes are dispatched
+ * up as [com.chizberg.rewind.features.map.MapAction.External.Ui.FiltersChanged] /
+ * [com.chizberg.rewind.features.map.MapAction.External.Ui.Controls.SetExpandedItems]; the search
+ * button goes to the *app* reducer instead (iOS `FloatingMenu.Action.searchTap` →
+ * `.left(.search(.present))`), so it arrives as a plain [onSearchClick] callback. Port of iOS
+ * `FloatingMenu` minus its map-type and location items, which arrive with their milestones.
+ *
+ * **Search rides in its own bubble, pushed to the far edge**, mirroring iOS: there every item wears
+ * its own capsule (`BackgroundModifier`) and a `Spacer()` splits the filter items from the fixed
+ * ones (`search`, `location`). Grouping the glyphs by what they act on is the point — the filters
+ * narrow *which images* load, while search moves *where the map looks*, so a single shared pill read
+ * as one menu of unrelated things. Location joins the trailing bubble with its own milestone.
  *
  * Expansion mirrors iOS (`FloatingMenuImpl`: the row on top, the expanded item below it, so the
  * selector grows into the gap above the preview strip) with one divergence: the clock stays in the
@@ -87,12 +99,13 @@ import androidx.compose.ui.graphics.Brush as GradientBrush
  * `IconToggleButton` `schedule`).
  */
 @Composable
-fun FiltersControl(
+fun FloatingMenu(
     filters: ImageRequestFilters,
     scheme: GradientScheme,
     expandedItems: Set<MapControlItem>,
     onFiltersChanged: (ImageRequestFilters) -> Unit,
     onExpandedItemsChanged: (Set<MapControlItem>) -> Unit,
+    onSearchClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val isTimePickerExpanded = MapControlItem.TimePicker in expandedItems
@@ -102,62 +115,108 @@ fun FiltersControl(
             if (isPainting) R.string.image_kind_paintings else R.string.image_kind_photos,
         )
     Column(modifier.fillMaxWidth()) {
-        ControlsPanel(Modifier.padding(horizontal = ScreenPadding)) {
-            Row(
-                modifier = Modifier.padding(PanelPadding),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(ControlSpacing),
-            ) {
-                MenuToggle(
-                    checked = isTimePickerExpanded,
-                    onCheckedChange = { expanded ->
-                        onExpandedItemsChanged(
-                            if (expanded) {
-                                expandedItems + MapControlItem.TimePicker
-                            } else {
-                                expandedItems - MapControlItem.TimePicker
-                            },
-                        )
-                    },
-                    icon = Icons.Rounded.Schedule,
-                    description = stringResource(R.string.year_range),
-                    // Nothing else on screen says the filter is on while the picker is closed, and
-                    // the accent tint alone (iOS's only cue) went unnoticed — so a notification-style
-                    // dot marks it, with the range itself left to the screen reader.
-                    badged = filters.isRangeModified,
-                    stateLabel =
-                        "${filters.yearRange.first} - ${filters.yearRange.last}"
-                            .takeIf { filters.isRangeModified },
-                    isActive = filters.isRangeModified,
-                )
-                MenuToggle(
-                    checked = isPainting,
-                    onCheckedChange = { checked ->
-                        val kind =
-                            if (checked) {
-                                ImageRequestFilters.ImageKind.Painting
-                            } else {
-                                ImageRequestFilters.ImageKind.Photo
-                            }
-                        onFiltersChanged(filters.copy(imageKind = kind))
-                    },
-                    // FILL-axis swap (iOS `paintbrush.pointed` / `.fill`) plus the mode spelled out:
-                    // the tonal container alone reads as decoration and is easy to miss.
-                    icon = if (isPainting) Icons.Rounded.Brush else Icons.Outlined.Brush,
-                    description = kindLabel,
-                    label = kindLabel.takeIf { isPainting },
+        // Capped to the same width as the selector below, so the trailing bubble lands on the
+        // selector's far edge instead of drifting off across a landscape screen (iOS caps the whole
+        // menu at 450pt in the regular size class).
+        Row(
+            modifier =
+                Modifier
+                    .padding(horizontal = ScreenPadding)
+                    .widthIn(max = MaxWidth)
+                    .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ControlsPanel {
+                Row(
+                    modifier = Modifier.padding(PanelPadding),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(ControlSpacing),
+                ) {
+                    MenuToggle(
+                        checked = isTimePickerExpanded,
+                        onCheckedChange = { expanded ->
+                            onExpandedItemsChanged(
+                                if (expanded) {
+                                    expandedItems + MapControlItem.TimePicker
+                                } else {
+                                    expandedItems - MapControlItem.TimePicker
+                                },
+                            )
+                        },
+                        icon = Icons.Rounded.Schedule,
+                        description = stringResource(R.string.year_range),
+                        // Nothing else on screen says the filter is on while the picker is closed,
+                        // and the accent tint alone (iOS's only cue) went unnoticed — so a
+                        // notification-style dot marks it, the range left to the screen reader.
+                        badged = filters.isRangeModified,
+                        stateLabel =
+                            "${filters.yearRange.first} - ${filters.yearRange.last}"
+                                .takeIf { filters.isRangeModified },
+                        isActive = filters.isRangeModified,
+                    )
+                    MenuToggle(
+                        checked = isPainting,
+                        onCheckedChange = { checked ->
+                            val kind =
+                                if (checked) {
+                                    ImageRequestFilters.ImageKind.Painting
+                                } else {
+                                    ImageRequestFilters.ImageKind.Photo
+                                }
+                            onFiltersChanged(filters.copy(imageKind = kind))
+                        },
+                        // FILL-axis swap (iOS `paintbrush.pointed` / `.fill`) plus the mode spelled
+                        // out: the tonal container alone reads as decoration and is easy to miss.
+                        icon = if (isPainting) Icons.Rounded.Brush else Icons.Outlined.Brush,
+                        description = kindLabel,
+                        label = kindLabel.takeIf { isPainting },
+                    )
+                }
+            }
+            // iOS `Spacer()` between the filter items and the fixed ones. The trailing panel
+            // keeps a gap of its own, so the bubbles never touch even when width runs out.
+            Spacer(Modifier.weight(1f))
+            ControlsPanel(Modifier.padding(start = PanelGap)) {
+                // A fixed item on iOS too (`FloatingMenuButton(item: .search)`), so it is a plain
+                // button, never checked and never expanding anything.
+                MenuButton(
+                    modifier = Modifier.padding(PanelPadding),
+                    onClick = onSearchClick,
+                    icon = Icons.Rounded.Search,
+                    description = stringResource(R.string.search),
                 )
             }
         }
-        // The side inset lives *inside* the animated content on purpose: this is the only clipped
-        // node on screen, and a panel flush with the clip edge had its drop shadow cut off for the
-        // length of the expansion and then snap in when the clip lifted.
-        AnimatedVisibility(visible = isTimePickerExpanded) {
+        // The selector unfolds by its own size rather than through `AnimatedVisibility`, and
+        // without a cross-fade: the panel is opaque from the first frame and grows out of the row
+        // the way iOS's expanded item does (`FloatingMenuImpl` morphs it into place via
+        // `matchedGeometryEffect`). A clip-reveal is what `expandVertically` gives, and it cuts the
+        // panel across — with a hairline instead of a shadow that leaves the outline hanging open
+        // along a straight edge for the whole animation, which the old fade used to hide. Animating
+        // the height instead means the rounded rect, and so the ring around it, is drawn whole on
+        // every frame; the selector inside is revealed through it (Surface clips to its shape).
+        // The spring carries iOS's `mapControlsAnimation` bounce, so it overshoots a touch instead
+        // of easing flatly into place. The side inset stays out of the animated height for the same
+        // reason it used to sit inside the clip: it belongs to the panel, not to the reveal.
+        val unfold by
+            animateFloatAsState(
+                targetValue = if (isTimePickerExpanded) 1f else 0f,
+                animationSpec = PanelSpring,
+                label = "yearSelectorUnfold",
+            )
+        if (unfold > 0f) {
             ControlsPanel(
                 Modifier
-                    .padding(start = ScreenPadding, end = ScreenPadding, top = PanelGap)
+                    .padding(start = ScreenPadding, end = ScreenPadding)
+                    .padding(top = PanelGap * unfold.coerceIn(0f, 1f))
                     .widthIn(max = MaxWidth)
-                    .fillMaxWidth(),
+                    // Both axes scale together, off the leading edge: the enclosing Column aligns
+                    // Start, so a fraction of the width leaves the panel's left edge pinned at
+                    // ScreenPadding while the right edge runs out to meet the search bubble above.
+                    // Width can only take 0..1, so the spring's overshoot rides on the height alone
+                    // — three-odd dp at the tail, past the point the two axes are read together.
+                    .fillMaxWidth(unfold.coerceIn(0f, 1f))
+                    .height(SelectorPanelHeight * unfold),
             ) {
                 YearSelector(
                     yearRange = filters.yearRange,
@@ -175,7 +234,13 @@ fun FiltersControl(
     }
 }
 
-/** Glass -> tonal surface: RewindGlass = `surfaceContainerHigh`, floating-toolbar depth. */
+/**
+ * Glass -> tonal surface: RewindGlass = `surfaceContainerHigh`, separated from the map by a hairline
+ * rather than a drop shadow. A shadow is what the canon prescribes for floating chrome, but over a
+ * map full of tinted pins it was one more thing competing for the eye, and it made the panels read
+ * as stacked on the annotations; the 1dp `outlineVariant` ring — the same one the thumbs wear —
+ * states the edge without claiming any depth.
+ */
 @Composable
 private fun ControlsPanel(
     modifier: Modifier = Modifier,
@@ -185,7 +250,11 @@ private fun ControlsPanel(
         modifier = modifier,
         shape = RoundedCornerShape(PanelCorner),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shadowElevation = PanelElevation,
+        border =
+            BorderStroke(
+                Hairline,
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = HAIRLINE_ALPHA),
+            ),
         content = content,
     )
 }
@@ -275,6 +344,34 @@ private fun MenuToggle(
                     maxLines = 1,
                 )
             }
+        }
+    }
+}
+
+/**
+ * A menu control that just acts. Port of the iOS `FloatingMenuButton` (its `.fixed` items — search
+ * here, map type and location later): [MenuToggle]'s geometry and resting colours without a checked
+ * state, so a control reads the same whichever bubble it sits in.
+ */
+@Composable
+private fun MenuButton(
+    onClick: () -> Unit,
+    icon: ImageVector,
+    description: String,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier.height(ToggleHeight),
+        shape = CircleShape,
+        color = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = TogglePaddingH),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, contentDescription = description)
         }
     }
 }
@@ -448,8 +545,8 @@ private fun GradientTrack(
 /**
  * One year-tinted thumb carrying its year. Port of iOS `ThumbView`: tinted by [GradientScheme.color]
  * for its [year] with a legible [GradientScheme.foreground] label; retinted in real time as the year
- * changes under the finger (`animateColorAsState`). The 1dp `outlineVariant` ring is the year-fill
- * canon (readable on any surface). The touch target spans the selector's full height, and the
+ * changes under the finger (`animateColorAsState`). The year-fill canon's `outlineVariant` ring
+ * keeps it readable on any surface, at the same dimmed [Hairline] the panels wear. The touch target spans the selector's full height, and the
  * semantics stand in for what the stock slider would have given ([onYearRequested] is TalkBack's
  * "adjust" path).
  */
@@ -489,10 +586,14 @@ private fun YearThumb(
             shape = RoundedCornerShape(ThumbCorner),
             color = containerColor,
             contentColor = contentColor,
-            // No shadow of its own: depth is stated once, by the panel this sits inside (M3 doesn't
-            // stack elevation, and its own slider thumbs carry no shadow). Separation from the
-            // gradient underneath is the canon 1dp ring's job.
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            // No shadow of its own: there are none left in the chrome, and M3 wouldn't stack
+            // elevation anyway (its own slider thumbs carry none either). Separation from the
+            // gradient underneath is the hairline's job.
+            border =
+                BorderStroke(
+                    Hairline,
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = HAIRLINE_ALPHA),
+                ),
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Text(
@@ -536,11 +637,20 @@ private val MaxWidth = 520.dp
 private val ScreenPadding = 16.dp
 private val PanelCorner = 28.dp
 
-// M3 elevation level 2 — the canon depth for floating chrome over the map (design/01-map.md §6,
-// реш. #11: M3-native shadowElevation, not a hand-tuned match for the iOS drop shadow). Nothing
-// inside the panel adds a second shadow.
-private val PanelElevation = 3.dp
+// The one outline the chrome uses — panels and thumbs alike — instead of the canon's elevation
+// level 2 (see [ControlsPanel]); nothing here carries a shadow now, so nothing needs a second one
+// either. `outlineVariant` is already M3's quietest outline, and at full strength it still drew the
+// eye over a busy map, so it runs at half: enough to state an edge, not enough to be read as one
+// more thing on screen.
+private val Hairline = 1.dp
+private const val HAIRLINE_ALPHA = 0.5f
 private val PanelGap = 8.dp
+
+// The unfold's own spring, standing in for iOS `mapControlsAnimation`
+// (`interactiveSpring(duration: 0.5, extraBounce: 0.1)`): slightly under-damped, so the panel
+// settles with a small overshoot rather than a flat ease.
+private val PanelSpring =
+    spring<Float>(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow)
 private val PanelPadding = 4.dp
 private val ControlSpacing = 4.dp
 
@@ -557,3 +667,8 @@ private val ThumbWidth = 54.dp
 private val ThumbHeight = 30.dp
 private val ThumbCorner = 15.dp
 private val TrackThickness = 8.dp
+
+// The selector panel's settled height, which the unfold animates towards. Deterministic (the
+// selector is a fixed-height row), so the panel can own its height instead of being clip-revealed —
+// and it lands on the same 56dp pill as the toolbar panels.
+private val SelectorPanelHeight = SelectorHeight + SelectorPaddingV * 2

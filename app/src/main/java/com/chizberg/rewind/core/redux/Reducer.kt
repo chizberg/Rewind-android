@@ -114,7 +114,10 @@ class Reducer<State, Action>(
     }
 }
 
-/** Shared debounce ids and their delays. Same values as iOS `DebouncedActionID`. */
+/**
+ * Shared debounce ids and their delays. Same values as iOS `DebouncedActionID`, except
+ * [SearchQueryChanged], which has no iOS counterpart (see its own comment).
+ */
 enum class DebouncedActionId(
     val delay: Duration,
 ) {
@@ -122,6 +125,13 @@ enum class DebouncedActionId(
     UpdatePreviews(100.milliseconds),
     FiltersChanged(100.milliseconds),
     UnfoldControlsBack(2.seconds),
+
+    /**
+     * Android-only: the place-autocomplete fetch behind the search field. iOS has no delay to port
+     * here — `MKLocalSearchCompleter` debounces inside itself — while Places' Autocomplete fires on
+     * every call, so this is a chosen value (the design pack's ~250 ms), not a mirrored one.
+     */
+    SearchQueryChanged(250.milliseconds),
     ;
 
     /** Key used to deduplicate / cancel the underlying async effect. */

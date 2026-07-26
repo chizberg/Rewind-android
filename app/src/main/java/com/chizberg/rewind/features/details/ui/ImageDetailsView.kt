@@ -63,7 +63,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
@@ -80,6 +79,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImagePainter
 import com.chizberg.rewind.R
+import com.chizberg.rewind.app.RewindAlert
 import com.chizberg.rewind.domain.GradientScheme
 import com.chizberg.rewind.domain.ModelImage
 import com.chizberg.rewind.features.details.ImageDetailsAction
@@ -229,11 +229,7 @@ fun ImageDetailsView(
     }
 
     state.alert?.let { params ->
-        DetailsAlert(
-            title = params.title,
-            message = params.message,
-            onDismiss = { model(ImageDetailsAction.Alert.Dismiss) },
-        )
+        RewindAlert(params = params, onDismiss = { model(ImageDetailsAction.Alert.Dismiss) })
     }
 
     // Recursion: a pastvu-link tap presents the linked photo as a full-screen screen on top. Its own
@@ -838,28 +834,4 @@ private fun FullscreenImage(
             }
         }
     }
-}
-
-@Composable
-private fun DetailsAlert(
-    title: String?,
-    message: String?,
-    onDismiss: () -> Unit,
-) {
-    val clipboard = LocalClipboardManager.current
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = title?.let { { Text(it) } },
-        text = message?.let { { Text(it) } },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ok)) } },
-        dismissButton =
-            message?.let {
-                {
-                    TextButton(onClick = {
-                        clipboard.setText(AnnotatedString(it))
-                        onDismiss()
-                    }) { Text(stringResource(R.string.copy_to_clipboard)) }
-                }
-            },
-    )
 }

@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import coil3.ImageLoader
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
+import com.chizberg.rewind.BuildConfig
 import com.chizberg.rewind.core.redux.Property
 import com.chizberg.rewind.core.redux.Reducer
 import com.chizberg.rewind.domain.GradientScheme
@@ -22,6 +23,7 @@ import com.chizberg.rewind.features.map.CameraFocus
 import com.chizberg.rewind.features.map.MapAction
 import com.chizberg.rewind.features.map.MapState
 import com.chizberg.rewind.features.map.makeMapModel
+import com.chizberg.rewind.features.search.makeSearchModel
 import com.chizberg.rewind.features.settings.SettingsState
 import com.chizberg.rewind.network.RequestPerformer
 import com.chizberg.rewind.network.RewindRemotes
@@ -29,6 +31,8 @@ import com.chizberg.rewind.network.invoke
 import com.chizberg.rewind.network.okHttpRequestPerformer
 import com.chizberg.rewind.persistence.FavoritesStorage
 import com.chizberg.rewind.persistence.JsonPreference
+import com.google.android.libraries.places.api.Places
+import com.google.android.libraries.places.api.net.PlacesClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -42,6 +46,10 @@ import java.io.File
 
 /** Zoom the map settles at when jumping to an image from its details screen (iOS `focusOn` z17). */
 private const val SHOW_ON_MAP_ZOOM = 17f
+
+/** Zoom the map settles at on a found place (iOS `AppGraph`'s `focusOn(..., zoom: 15)`) — wider
+ *  than [SHOW_ON_MAP_ZOOM], since a place is a neighbourhood, not a single photo. */
+private const val SEARCH_FOCUS_ZOOM = 15f
 
 /**
  * The manual composition root. Port of iOS `AppGraph`: builds the network/image stack, the map and
@@ -174,9 +182,34 @@ class AppGraph(
         )
     }
 
+    // Places is initialised on the first search, not at startup: the SDK is only ever needed by that
+    // one screen, and the map (a different SDK, same key) must not wait on it. `isInitialized` guards
+    // the process-wide singleton against a second call after an activity recreation.
+    private val placesClient: PlacesClient by lazy {
+        if (!Places.isInitialized()) {
+            Places.initializeWithNewPlacesApiEnabled(appContext, BuildConfig.MAPS_API_KEY)
+        }
+        Places.createClient(appContext)
+    }
+
+    private val searchModelFactory: SearchModelFactory = {
+        makeSearchModel(
+            // A provider per screen, as on iOS — it owns the Places billing session, which must not
+            // outlive the search it belongs to (see GooglePlacesSuggestProvider).
+            suggestProvider = GooglePlacesSuggestProvider(placesClient),
+            onLocationFound = { coordinate ->
+                // iOS: `appModelRef?(.search(.dismiss))` then `focusOn(coordinate, zoom: 15)`.
+                appModel(AppAction.Search.Dismiss)
+                focusRequestsMutable.tryEmit(CameraFocus(coordinate, SEARCH_FOCUS_ZOOM))
+            },
+            scope = scope,
+        )
+    }
+
     val appModel: AppModel =
         makeAppModel(
             imageDetailsFactory = imageDetailsFactory,
+            searchModelFactory = searchModelFactory,
             favoritesModel = favoritesModel,
             currentRegionImages = { mapModel.state.value.currentRegionImages },
             sorting = imageSorting,

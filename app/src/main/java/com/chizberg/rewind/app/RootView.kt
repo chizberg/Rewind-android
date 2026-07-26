@@ -1,17 +1,11 @@
 package com.chizberg.rewind.app
 
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.chizberg.rewind.R
@@ -21,6 +15,7 @@ import com.chizberg.rewind.features.map.AnnotationValue
 import com.chizberg.rewind.features.map.PreviewCard
 import com.chizberg.rewind.features.map.ui.LocalRewindImageLoader
 import com.chizberg.rewind.features.map.ui.RewindMap
+import com.chizberg.rewind.features.search.ui.SearchView
 import com.chizberg.rewind.ui.Overlay
 import com.chizberg.rewind.ui.OverlayHost
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -31,8 +26,8 @@ private const val THUMBNAIL_SOURCE = "thumbnail"
 
 /**
  * The app's root. Port of iOS `RootView`: the map with its controls, plus state-managed overlays on
- * top (image details, alerts; the list/search/settings/onboarding overlays land in their
- * milestones). The [AppGraph] is held by [RewindViewModel], so it — and all the loaded map state —
+ * top (image details, the image list, the place search, alerts; the settings/onboarding overlays
+ * land in their milestone). The [AppGraph] is held by [RewindViewModel], so it — and all the loaded map state —
  * survives activity recreation (rotation, or a recreate while the process lives) instead of being
  * rebuilt. The camera restores separately from saved instance state (maps-compose's
  * `rememberCameraPositionState` is `rememberSaveable`).
@@ -57,7 +52,6 @@ fun RootView(modifier: Modifier = Modifier) {
     val graph = viewModel<RewindViewModel>().graph
 
     val appState by graph.appModel.state.collectAsStateWithLifecycle()
-    val clipboard = LocalClipboardManager.current
     // The year-tint range tracks the selected image kind; collected distinctly so a photo/painting
     // switch (rare) recomposes the overlay, but per-frame annotation churn does not. The seed is read
     // once inside `remember` (a non-`@Composable` lambda, so off-composition) — reading `state.value`
@@ -98,6 +92,7 @@ fun RootView(modifier: Modifier = Modifier) {
                     onViewAsListClick = {
                         graph.appModel(AppAction.ImageList.PresentCurrentRegionImages)
                     },
+                    onSearchClick = { graph.appModel(AppAction.Search.Present) },
                     modifier = Modifier.fillMaxSize(),
                 )
             },
@@ -128,28 +123,23 @@ fun RootView(modifier: Modifier = Modifier) {
                         onDismiss = { graph.appModel(AppAction.ImageList.Dismiss) },
                     )
                 }
+
+                // The place search is a peer of those two (iOS presents it as a sheet over the map;
+                // here it is one more layer in the same stack, so back closes it the same way).
+                Overlay(
+                    target = appState.searchModel,
+                    onBack = { graph.appModel(AppAction.Search.Dismiss) },
+                ) { searchModel ->
+                    SearchView(
+                        model = searchModel,
+                        onDismiss = { graph.appModel(AppAction.Search.Dismiss) },
+                    )
+                }
             },
         )
 
         appState.alert?.let { params ->
-            AlertDialog(
-                onDismissRequest = { graph.appModel(AppAction.Alert.Dismiss) },
-                title = params.title?.let { { Text(it) } },
-                text = params.message?.let { { Text(it) } },
-                confirmButton = {
-                    TextButton(onClick = { graph.appModel(AppAction.Alert.Dismiss) }) {
-                        Text(stringResource(R.string.ok))
-                    }
-                },
-                dismissButton =
-                    params.message?.let { message ->
-                        {
-                            TextButton(onClick = { clipboard.setText(AnnotatedString(message)) }) {
-                                Text(stringResource(R.string.copy_to_clipboard))
-                            }
-                        }
-                    },
-            )
+            RewindAlert(params = params, onDismiss = { graph.appModel(AppAction.Alert.Dismiss) })
         }
     }
 }

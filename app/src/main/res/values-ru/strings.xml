@@ -32,4 +32,9 @@
     <string name="year_range">Диапазон лет</string>
     <string name="year_range_start">Начальный год</string>
     <string name="year_range_end">Конечный год</string>
+    <string name="search">Поиск</string>
+    <string name="search_for_location">Поиск локации</string>
+    <string name="search_start_typing">Введите запрос</string>
+    <string name="search_insert_suggest">Вставить в запрос</string>
+    <string name="search_clear">Очистить</string>
 </resources>

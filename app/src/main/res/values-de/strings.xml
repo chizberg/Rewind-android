@@ -32,4 +32,9 @@
     <string name="year_range">Jahresbereich</string>
     <string name="year_range_start">Startjahr</string>
     <string name="year_range_end">Endjahr</string>
+    <string name="search">Suche</string>
+    <string name="search_for_location">Standort suchen</string>
+    <string name="search_start_typing">Suchbegriff eingeben</string>
+    <string name="search_insert_suggest">In die Suche einfügen</string>
+    <string name="search_clear">Löschen</string>
 </resources>

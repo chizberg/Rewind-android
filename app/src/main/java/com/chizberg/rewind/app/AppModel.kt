@@ -11,6 +11,7 @@ import com.chizberg.rewind.features.details.ImageDetailsModel
 import com.chizberg.rewind.features.favorites.FavoritesModel
 import com.chizberg.rewind.features.imagelist.ImageListModel
 import com.chizberg.rewind.features.imagelist.makeImageListModel
+import com.chizberg.rewind.features.search.SearchModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.emptyFlow
@@ -19,9 +20,9 @@ import kotlinx.coroutines.flow.emptyFlow
 typealias AppModel = Reducer<AppState, AppAction>
 
 /**
- * State-managed overlays over the map. Port of iOS `AppState`, trimmed to M10: the image-details
- * screen, the image list, an app-level alert, and the active tint scheme. Search (M12), settings
- * and onboarding (M13) join in their milestones — same shape (a nullable child model each) as they
+ * State-managed overlays over the map. Port of iOS `AppState`, trimmed to M12: the image-details
+ * screen, the image list, the place search, an app-level alert, and the active tint scheme. Settings
+ * and onboarding (M13) join in their milestone — same shape (a nullable child model each) as they
  * land.
  *
  * Divergence: no `Identified` wrapper — Compose keys overlays off content presence, so a nullable
@@ -34,6 +35,7 @@ data class AppState(
     val gradientScheme: GradientScheme,
     val previewedImage: ImageDetailsModel? = null,
     val previewedList: ImageListModel? = null,
+    val searchModel: SearchModel? = null,
     val alert: AlertParams? = null,
 )
 
@@ -66,6 +68,16 @@ sealed interface AppAction {
         data object Dismiss : ImageList
     }
 
+    /**
+     * The place-search overlay. Port of iOS `AppAction.Search`: [Present] builds a *fresh* model
+     * every time (the typed query and its suggests do not survive a close), [Dismiss] drops it.
+     */
+    sealed interface Search : AppAction {
+        data object Present : Search
+
+        data object Dismiss : Search
+    }
+
     sealed interface Alert : AppAction {
         data class Present(
             val params: AlertParams?,
@@ -82,8 +94,11 @@ sealed interface AppAction {
 /** Builds an [ImageDetailsModel] for a tapped image. Port of iOS `ImageDetailsFactory`. */
 typealias ImageDetailsFactory = (ModelImage, String) -> ImageDetailsModel
 
+/** Builds a [SearchModel] for one opening of the search screen. Port of iOS `searchModelFactory`. */
+typealias SearchModelFactory = () -> SearchModel
+
 /**
- * Builds the app reducer. Port of iOS `makeAppModel`, trimmed to M10.
+ * Builds the app reducer. Port of iOS `makeAppModel`, trimmed to M12.
  *
  * Divergences:
  * - iOS `imageDetails(.dismiss)` also fires `performMapAction(.previewClosed)` to deselect the
@@ -99,6 +114,7 @@ typealias ImageDetailsFactory = (ModelImage, String) -> ImageDetailsModel
 @Suppress("LongParameterList")
 fun makeAppModel(
     imageDetailsFactory: ImageDetailsFactory,
+    searchModelFactory: SearchModelFactory,
     favoritesModel: FavoritesModel,
     currentRegionImages: () -> List<ModelImage>,
     sorting: Property<ImageSorting>,
@@ -164,6 +180,10 @@ fun makeAppModel(
                 )
 
             AppAction.ImageList.Dismiss -> state.copy(previewedList = null)
+
+            AppAction.Search.Present -> state.copy(searchModel = searchModelFactory())
+
+            AppAction.Search.Dismiss -> state.copy(searchModel = null)
 
             is AppAction.Alert.Present -> action.params?.let { state.copy(alert = it) } ?: state
 

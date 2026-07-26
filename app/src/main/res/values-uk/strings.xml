@@ -32,4 +32,9 @@
     <string name="year_range">Діапазон років</string>
     <string name="year_range_start">Початковий рік</string>
     <string name="year_range_end">Кінцевий рік</string>
+    <string name="search">Пошук</string>
+    <string name="search_for_location">Пошук локації</string>
+    <string name="search_start_typing">Почніть пошук</string>
+    <string name="search_insert_suggest">Вставити в запит</string>
+    <string name="search_clear">Очистити</string>
 </resources>
