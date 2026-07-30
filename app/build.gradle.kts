@@ -102,6 +102,9 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.maps.compose)
     implementation(libs.play.services.maps)
+    // M13.5: the user's own location — FusedLocationProviderClient, the Android counterpart of
+    // iOS's CLLocationManager (listed under M6 in plan.md, actually landed with the location button).
+    implementation(libs.play.services.location)
     // M12: place search — Places SDK for Android (New): autocomplete predictions + fetchPlace,
     // billed per session token. Runs on the same MAPS_API_KEY as the map (see
     // secrets.defaults.properties), so no new secret is introduced.

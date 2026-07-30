@@ -14,7 +14,28 @@ data class AlertParams(
     val message: String? = null,
     /** iOS `.error` attaches a "Copy to clipboard" action; `.info` (M12's "nothing found") does not. */
     val isError: Boolean = true,
-)
+    /** An extra, non-stock button. Never combined with the error's copy button (see [Action]). */
+    val action: Action? = null,
+) {
+    /**
+     * Port of one iOS `AlertParams.Action` beyond the stock "OK": a [handler] plus the [kind] that
+     * names it. The label is a resource the alert host picks, not a string carried here — reducers
+     * building alerts are JVM-only and hold no `R` references (the same reason alert bodies are
+     * still English literals; localising them is its own task, see M12).
+     *
+     * At most one such action exists per alert, and the host renders it in the slot the error's
+     * "Copy to clipboard" would take — no alert this app builds wants both.
+     */
+    data class Action(
+        val kind: Kind,
+        val handler: () -> Unit,
+    ) {
+        enum class Kind {
+            /** M13.5's "Go to Settings" — the way out of a denied location permission. */
+            OpenSettings,
+        }
+    }
+}
 
 /** iOS `AlertParams.error`: the error's description becomes the (copyable) message. */
 fun errorAlert(

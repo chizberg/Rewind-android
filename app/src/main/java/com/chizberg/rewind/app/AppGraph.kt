@@ -2,6 +2,7 @@ package com.chizberg.rewind.app
 
 import android.content.Context
 import android.content.Intent
+import android.provider.Settings
 import androidx.core.net.toUri
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
@@ -20,8 +21,10 @@ import com.chizberg.rewind.features.favorites.FavoritesModel
 import com.chizberg.rewind.features.favorites.isFavorite
 import com.chizberg.rewind.features.favorites.makeFavoritesModel
 import com.chizberg.rewind.features.map.CameraFocus
+import com.chizberg.rewind.features.map.LocationModel
 import com.chizberg.rewind.features.map.MapAction
 import com.chizberg.rewind.features.map.MapState
+import com.chizberg.rewind.features.map.makeLocationModel
 import com.chizberg.rewind.features.map.makeMapModel
 import com.chizberg.rewind.features.search.makeSearchModel
 import com.chizberg.rewind.features.settings.SettingsState
@@ -97,6 +100,20 @@ class AppGraph(
             .resolveActivity(appContext.packageManager) != null
     }
 
+    // The "Go to Settings" button of the denied-location alert. iOS opens
+    // `UIApplication.openSettingsURLString` through its `urlOpener`; Android has no URL for it, so
+    // this is a system intent rather than one more link (and so it bypasses [canOpenUrl] entirely).
+    private val openAppSettings: () -> Unit = {
+        runCatching {
+            appContext.startActivity(
+                Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    "package:${appContext.packageName}".toUri(),
+                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }
+    }
+
     private val focusRequestsMutable = MutableSharedFlow<CameraFocus>(extraBufferCapacity = 1)
 
     /** Camera-focus requests emitted by "show on map"; collected and animated by the root view. */
@@ -146,6 +163,16 @@ class AppGraph(
             },
         )
 
+    // One location source and one reducer per graph, matching iOS's single `makeLocationModel()`:
+    // tracking outlives any single screen. The source is the Play Services boundary; the reducer
+    // itself is JVM-only (see features/map/LocationModel.kt).
+    private val locationSource = FusedLocationSource(appContext, scope)
+
+    /** Rings when the map asks for location access; [LocationPermissionHost] answers it. */
+    val locationPermissionRequests: SharedFlow<Unit> = locationSource.permissionRequests
+
+    val locationModel: LocationModel = makeLocationModel(locationSource, scope)
+
     val mapModel: Reducer<MapState, MapAction> =
         makeMapModel(
             annotationsRemote = remotes.annotations,
@@ -154,6 +181,12 @@ class AppGraph(
             },
             scope = scope,
             sorting = { imageSorting.value },
+            // The reducer decides where and how far to fly; the root view flies there (M9's
+            // divergence — the camera lives in Compose).
+            focusCamera = { focusRequestsMutable.tryEmit(it) },
+            locationModel = { locationModel(it) },
+            presentAlert = { appModel(AppAction.Alert.Present(it)) },
+            openAppSettings = openAppSettings,
         )
 
     private val imageDetailsFactory: ImageDetailsFactory = { image, source ->
@@ -226,6 +259,12 @@ class AppGraph(
         scope.launch {
             sortingFlow.drop(1).collect { mapModel(MapAction.Internal.UpdatePreviews) }
         }
+        // Port of iOS `AppGraph`: `locationModel.$state.currentAndNewValues.addObserver { ... }`.
+        // The current value comes with the subscription (a StateFlow replays it), which seeds the
+        // map's own `locationState` — iOS seeds it through `MapState.makeInitial(locationState:)`
+        // and then gets the same value once more from the observer. Both are the empty state, and
+        // `newLocationState` no-ops on a fix-less update, so the duplicate is harmless either way.
+        locationModel.onStateUpdate { mapModel(MapAction.External.NewLocationState(it)) }
     }
 }
 

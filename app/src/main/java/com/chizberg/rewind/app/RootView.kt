@@ -12,6 +12,7 @@ import com.chizberg.rewind.R
 import com.chizberg.rewind.features.details.ui.ImageDetailsView
 import com.chizberg.rewind.features.imagelist.ui.ImageListView
 import com.chizberg.rewind.features.map.AnnotationValue
+import com.chizberg.rewind.features.map.LocationAction
 import com.chizberg.rewind.features.map.PreviewCard
 import com.chizberg.rewind.features.map.ui.LocalRewindImageLoader
 import com.chizberg.rewind.features.map.ui.RewindMap
@@ -64,6 +65,17 @@ fun RootView(modifier: Modifier = Modifier) {
                 .map { it.filters.imageKind.maxRange }
                 .distinctUntilChanged()
         }.collectAsStateWithLifecycle(initialValue = initialMaxRange)
+
+    // The system permission dialog can only be launched from composition, so the map's
+    // `requestAccess` lands here and the verdict goes back into the location reducer.
+    LocationPermissionHost(
+        requests = graph.locationPermissionRequests,
+        onAccessChanged = { granted ->
+            graph.locationModel(
+                LocationAction.LocationEvent.DidChangeAuthorizationStatus(granted),
+            )
+        },
+    )
 
     CompositionLocalProvider(LocalRewindImageLoader provides graph.imageLoader) {
         // The map is the permanent base of the overlay stack: always composed (never a navigation

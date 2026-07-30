@@ -19,7 +19,7 @@ enum class MapControlItem {
 
 /**
  * The map screen's state. Port of iOS `MapState`, trimmed to what is ported so far (clustering,
- * loading, previews); map type and location state arrive with their later milestones.
+ * loading, previews, location); map type arrives with its later milestone.
  *
  * Divergence from iOS: carries [zoom] explicitly. iOS reconstructs zoom from the region span via
  * the map size; we read Google Maps' camera zoom directly (see Zoom.kt), so `regionChanged` brings
@@ -47,6 +47,10 @@ data class MapState(
     val clusteringCellSpan: Double = 0.0,
     // The floating controls' own state (iOS `MapState.controls`).
     val controls: ControlsState = ControlsState(),
+    // The device's location-tracking state (iOS `MapState.locationState`), mirrored in from the
+    // location reducer via `NewLocationState`. iOS seeds it through `makeInitial(locationState:)`;
+    // here the stream's first (replayed) value does the same job — see AppGraph.
+    val locationState: LocationState = LocationState(),
 ) {
     /**
      * The floating controls' view state. Port of iOS `MapState.ControlsState`, trimmed to the

@@ -495,11 +495,72 @@ class MapModelTest {
     // These exercise features not yet ported to the M6 reducer; each lands (un-ignored, fleshed
     // out) with its feature's milestone. Kept as named stubs so the parity gap with iOS is visible.
 
-    @Ignore("LocationModel not ported yet — lands with the location button")
+    /**
+     * The first location fix recenters the map exactly once (zoom 15, not animated, via the
+     * injected [CameraFocus] channel — the reducer doesn't own the camera, see `CameraFocus.kt`);
+     * the map
+     * then reacts with a region change that loads normally; a second fix only updates state without
+     * recentering again; and a nil-location fix does not erase the last known location. Mirrors iOS
+     * `MapModelTests.firstLocationRecentersMapOnce` (`MapModelTests.swift:140-174`).
+     */
     @Test
-    fun firstLocationRecentersMapOnce() {
-        TODO("mirror iOS once LocationModel + newLocationState land")
-    }
+    fun firstLocationRecentersMapOnce() =
+        reducerTest { scope ->
+            val remote = FakeAnnotationsRemote()
+            val focuses = mutableListOf<CameraFocus>()
+            val model =
+                makeMapModel(
+                    remote.asRemote,
+                    onLoadFailed = {},
+                    scope = scope,
+                    now = { 0.0 },
+                    focusCamera = { focuses += it },
+                )
+
+            val first = Coordinate(latitude = 55.75, longitude = 37.61)
+            model(
+                MapAction.External.NewLocationState(
+                    LocationState(location = first, isAccessGranted = true),
+                ),
+            )
+            assertEquals(listOf(CameraFocus(first, 15f, animated = false)), focuses)
+            assertEquals(first, model.state.value.locationState.location)
+
+            // The map reacts with a region change → annotations load for the new region as normal.
+            remote.response = listOf(img(1, cellLat = 0, cellLon = 0, zoom = 15)) to emptyList()
+            model(
+                MapAction.External.Map.RegionChanged(
+                    region(zoom = 15),
+                    zoom = 15,
+                    cameraZoom = 15f,
+                ),
+            )
+            advanceUntilIdle()
+            assertEquals(
+                15,
+                model.state.value.lastLoadedParams
+                    ?.zoom,
+            )
+
+            // A second fix updates state but leaves the map alone: no further recenter.
+            val second = Coordinate(latitude = 59.94, longitude = 30.31)
+            model(
+                MapAction.External.NewLocationState(
+                    LocationState(location = second, isAccessGranted = true),
+                ),
+            )
+            assertEquals(1, focuses.size)
+            assertEquals(second, model.state.value.locationState.location)
+
+            // A nil-location update (e.g. a transient provider hiccup) keeps the last known location.
+            model(
+                MapAction.External.NewLocationState(
+                    LocationState(location = null, isAccessGranted = true),
+                ),
+            )
+            assertEquals(1, focuses.size)
+            assertEquals(second, model.state.value.locationState.location)
+        }
 
     @Ignore("map controls minimization not ported yet")
     @Test

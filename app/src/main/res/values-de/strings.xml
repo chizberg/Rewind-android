@@ -37,4 +37,6 @@
     <string name="search_start_typing">Suchbegriff eingeben</string>
     <string name="search_insert_suggest">In die Suche einfügen</string>
     <string name="search_clear">Löschen</string>
+    <string name="go_to_settings">Einstellungen öffnen</string>
+    <string name="my_location">Mein Standort</string>
 </resources>

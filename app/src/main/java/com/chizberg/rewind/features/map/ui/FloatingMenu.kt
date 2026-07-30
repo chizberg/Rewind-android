@@ -31,6 +31,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Brush
 import androidx.compose.material.icons.rounded.Brush
+import androidx.compose.material.icons.rounded.LocationDisabled
+import androidx.compose.material.icons.rounded.MyLocation
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Badge
@@ -78,19 +80,20 @@ import kotlin.math.roundToInt
 import androidx.compose.ui.graphics.Brush as GradientBrush
 
 /**
- * The map's floating menu: the filter controls (year-picker toggle, photo/painting switch) and the
- * place-search button, plus the year selector that expands underneath. Filter changes are dispatched
- * up as [com.chizberg.rewind.features.map.MapAction.External.Ui.FiltersChanged] /
- * [com.chizberg.rewind.features.map.MapAction.External.Ui.Controls.SetExpandedItems]; the search
- * button goes to the *app* reducer instead (iOS `FloatingMenu.Action.searchTap` →
- * `.left(.search(.present))`), so it arrives as a plain [onSearchClick] callback. Port of iOS
- * `FloatingMenu` minus its map-type and location items, which arrive with their milestones.
+ * The map's floating menu: the filter controls (year-picker toggle, photo/painting switch), the
+ * place-search and location buttons, plus the year selector that expands underneath. Filter changes
+ * are dispatched up as [com.chizberg.rewind.features.map.MapAction.External.Ui.FiltersChanged] /
+ * [com.chizberg.rewind.features.map.MapAction.External.Ui.Controls.SetExpandedItems], and so is the
+ * location tap (iOS `.locationTap` → `.right(.locationButtonTapped)`); the search button goes to the
+ * *app* reducer instead (iOS `.searchTap` → `.left(.search(.present))`), so it arrives as a plain
+ * [onSearchClick] callback. Port of iOS `FloatingMenu` minus its map-type item, which arrives with
+ * its milestone.
  *
- * **Search rides in its own bubble, pushed to the far edge**, mirroring iOS: there every item wears
- * its own capsule (`BackgroundModifier`) and a `Spacer()` splits the filter items from the fixed
- * ones (`search`, `location`). Grouping the glyphs by what they act on is the point — the filters
- * narrow *which images* load, while search moves *where the map looks*, so a single shared pill read
- * as one menu of unrelated things. Location joins the trailing bubble with its own milestone.
+ * **The fixed items ride in their own bubble, pushed to the far edge**, mirroring iOS: there every
+ * item wears its own capsule (`BackgroundModifier`) and a `Spacer()` splits the filter items from
+ * the fixed ones (`search`, `location`). Grouping the glyphs by what they act on is the point — the
+ * filters narrow *which images* load, while search and location move *where the map looks*, so a
+ * single shared pill read as one menu of unrelated things.
  *
  * Expansion mirrors iOS (`FloatingMenuImpl`: the row on top, the expanded item below it, so the
  * selector grows into the gap above the preview strip) with one divergence: the clock stays in the
@@ -103,9 +106,11 @@ fun FloatingMenu(
     filters: ImageRequestFilters,
     scheme: GradientScheme,
     expandedItems: Set<MapControlItem>,
+    locationAccessGranted: Boolean,
     onFiltersChanged: (ImageRequestFilters) -> Unit,
     onExpandedItemsChanged: (Set<MapControlItem>) -> Unit,
     onSearchClick: () -> Unit,
+    onLocationClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val isTimePickerExpanded = MapControlItem.TimePicker in expandedItems
@@ -177,14 +182,32 @@ fun FloatingMenu(
             // keeps a gap of its own, so the bubbles never touch even when width runs out.
             Spacer(Modifier.weight(1f))
             ControlsPanel(Modifier.padding(start = PanelGap)) {
-                // A fixed item on iOS too (`FloatingMenuButton(item: .search)`), so it is a plain
-                // button, never checked and never expanding anything.
-                MenuButton(
+                Row(
                     modifier = Modifier.padding(PanelPadding),
-                    onClick = onSearchClick,
-                    icon = Icons.Rounded.Search,
-                    description = stringResource(R.string.search),
-                )
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(ControlSpacing),
+                ) {
+                    // Both are fixed items on iOS too (`FloatingMenuButton(item:)`), so they are
+                    // plain buttons — never checked, never expanding anything. Same order as iOS:
+                    // search, then location.
+                    MenuButton(
+                        onClick = onSearchClick,
+                        icon = Icons.Rounded.Search,
+                        description = stringResource(R.string.search),
+                    )
+                    // Momentary, not a toggle (design canon): the glyph reports whether access is
+                    // there, the tap always means "take me to me" (iOS `location`/`location.slash`).
+                    MenuButton(
+                        onClick = onLocationClick,
+                        icon =
+                            if (locationAccessGranted) {
+                                Icons.Rounded.MyLocation
+                            } else {
+                                Icons.Rounded.LocationDisabled
+                            },
+                        description = stringResource(R.string.my_location),
+                    )
+                }
             }
         }
         // The selector unfolds by its own size rather than through `AnimatedVisibility`, and
@@ -350,7 +373,7 @@ private fun MenuToggle(
 
 /**
  * A menu control that just acts. Port of the iOS `FloatingMenuButton` (its `.fixed` items — search
- * here, map type and location later): [MenuToggle]'s geometry and resting colours without a checked
+ * and location here, map type later): [MenuToggle]'s geometry and resting colours without a checked
  * state, so a control reads the same whichever bubble it sits in.
  */
 @Composable

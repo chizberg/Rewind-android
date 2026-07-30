@@ -1,5 +1,6 @@
 package com.chizberg.rewind.features.map
 
+import com.chizberg.rewind.app.AlertParams
 import com.chizberg.rewind.core.redux.AsyncEffect
 import com.chizberg.rewind.core.redux.DebouncedActionId
 import com.chizberg.rewind.core.redux.Reducer
@@ -14,6 +15,12 @@ import kotlin.coroutines.cancellation.CancellationException
 /** Fixed async-effect id: a fresh load cancels the in-flight one for free. Same id as iOS. */
 private const val LOAD_ANNOTATIONS_ID = "load_annotations"
 private const val MILLIS_PER_SECOND = 1000.0
+
+/** Zoom the location button settles at, unless the camera is already closer in (iOS `locationZoom`). */
+private const val LOCATION_ZOOM = 17
+
+/** Zoom the one-off recenter on the first fix lands at (iOS `newLocationState`'s `zoom: 15`). */
+private const val FIRST_FIX_ZOOM = 15f
 
 /** The map screen's annotations remote. */
 typealias AnnotationsRemote =
@@ -33,6 +40,11 @@ typealias AnnotationsRemote =
  * `startAt` cursor, injected so tests stay deterministic. [sorting] is read fresh on each preview
  * pass (iOS reads `sorting.value`, a `Variable` fed from settings); until settings land it defaults
  * to iOS's `SettingsState.default.sorting`.
+ *
+ * M13.5 adds the location trio, all injected as lambdas (iOS holds the `LocationModel` itself, plus
+ * `performAppAction`/`urlOpener`): [locationModel] receives the two manager commands, [presentAlert]
+ * raises the two location alerts, [openAppSettings] is the handler behind "Go to Settings" (iOS
+ * `urlOpener(UIApplication.openSettingsURLString)`), and [focusCamera] carries every recenter.
  */
 @Suppress("TooGenericExceptionCaught")
 fun makeMapModel(
@@ -41,6 +53,13 @@ fun makeMapModel(
     scope: CoroutineScope,
     now: () -> Double = { System.currentTimeMillis() / MILLIS_PER_SECOND },
     sorting: () -> ImageSorting = { ImageSorting.DateAscending },
+    // Emits a camera recenter request — the Android stand-in for iOS's direct
+    // `map.value.set(region:animated:)` call inside `locationButtonTapped`/`newLocationState`,
+    // since the camera lives in Compose, not the reducer (same channel as `AppGraph.focusRequests`).
+    focusCamera: (CameraFocus) -> Unit = {},
+    locationModel: (LocationAction) -> Unit = {},
+    presentAlert: (AlertParams) -> Unit = {},
+    openAppSettings: () -> Unit = {},
 ): Reducer<MapState, MapAction> =
     Reducer(
         initial = MapState.initial,
@@ -79,6 +98,64 @@ fun makeMapModel(
 
             is MapAction.External.Ui.Controls.SetExpandedItems ->
                 state.copy(controls = state.controls.copy(expandedItems = action.items))
+
+            MapAction.External.Ui.MapViewLoaded -> {
+                effect {
+                    locationModel(LocationAction.RequestAccess)
+                    locationModel(LocationAction.TryStartUpdatingLocation)
+                }
+                state
+            }
+
+            MapAction.External.Ui.LocationButtonTapped -> {
+                val location = state.locationState.location
+                when {
+                    // Recenter, raising the zoom to LOCATION_ZOOM only when the camera is further
+                    // out — never pulling it back (iOS's commented-out one-liner:
+                    // `region.zoom = max(region.zoom, locationZoom)`). iOS measures the live map's
+                    // span; our camera lives in Compose, so the reducer decides from its own mirror
+                    // of it: the rounded zoom gates the raise (as iOS's integer
+                    // `zoom(region:mapSize:)` does) and the raw camera zoom is what survives
+                    // untouched when the camera is already closer in.
+                    location != null ->
+                        effect {
+                            val zoom =
+                                if (state.zoom < LOCATION_ZOOM) {
+                                    LOCATION_ZOOM.toFloat()
+                                } else {
+                                    state.cameraZoom
+                                }
+                            focusCamera(CameraFocus(location, zoom))
+                        }
+                    // As on iOS, "not determined" and "denied" share one alert — the way out of
+                    // both is the system settings page.
+                    !state.locationState.isAccessGranted ->
+                        effect { presentAlert(locationAccessDenied(openAppSettings)) }
+
+                    else -> effect { presentAlert(unableToDetermineLocation) }
+                }
+                state
+            }
+
+            is MapAction.External.NewLocationState -> {
+                val knownLocation = state.locationState.location
+                val newLocation = action.locationState.location
+                // The *first* fix recenters, once: the check reads the pre-mutation state, so it
+                // must stay ahead of the copy below (iOS relies on the same ordering).
+                if (newLocation != null && knownLocation == null) {
+                    // Not animated, as on iOS: the user did not ask for this move, so it lands
+                    // rather than flies.
+                    effect {
+                        focusCamera(CameraFocus(newLocation, FIRST_FIX_ZOOM, animated = false))
+                    }
+                }
+                // A fix-less update (a provider hiccup, or an authorization-only change) must not
+                // erase the last known location — iOS `$0.location = $0.location ?? state...`.
+                state.copy(
+                    locationState =
+                        action.locationState.copy(location = newLocation ?: knownLocation),
+                )
+            }
 
             is MapAction.Internal.RegionChanged -> {
                 asyncEffect(AsyncEffect.anotherAction(action = MapAction.Internal.LoadAnnotations))
@@ -155,3 +232,28 @@ fun makeMapModel(
             }
         }
     }
+
+/**
+ * iOS `AlertParams.locationAccessDenied(openSettings:)`, kept next to its only caller as there.
+ * Both alerts are plain info (iOS attaches "Copy to clipboard" only to `.error`), and their copy
+ * stays an English literal like every other reducer-raised alert — see M12 on why localising them
+ * is a task of its own. The path in the message is iOS's wording; Android's own is close enough
+ * ("Allow only while using the app"), and the button gets there in one tap anyway.
+ */
+private fun locationAccessDenied(openSettings: () -> Unit): AlertParams =
+    AlertParams(
+        title = "The app has no access to your location",
+        message =
+            "You can change it in Settings.\n" +
+                "Go to Apps -> Rewind -> Location -> While Using the App",
+        isError = false,
+        action = AlertParams.Action(AlertParams.Action.Kind.OpenSettings, openSettings),
+    )
+
+/** iOS `AlertParams.unableToDetermineLocation`: access is there, a fix is not (yet). */
+private val unableToDetermineLocation =
+    AlertParams(
+        title = "Unable to Determine Location",
+        message = "Please try again later",
+        isError = false,
+    )

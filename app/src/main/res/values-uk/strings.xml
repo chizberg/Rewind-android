@@ -37,4 +37,6 @@
     <string name="search_start_typing">Почніть пошук</string>
     <string name="search_insert_suggest">Вставити в запит</string>
     <string name="search_clear">Очистити</string>
+    <string name="go_to_settings">Відкрити налаштування</string>
+    <string name="my_location">Моє місцезнаходження</string>
 </resources>

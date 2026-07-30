@@ -52,6 +52,7 @@ import com.google.android.gms.maps.model.CameraPosition
 import com.google.maps.android.compose.ComposeMapColorScheme
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.GoogleMapComposable
+import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.rememberCameraPositionState
@@ -166,12 +167,17 @@ fun RewindMap(
             }
     }
 
-    // "Show on map" / cluster focus: animate the camera to the requested point + zoom.
+    // "Show on map" / search / location focus: move the camera to the requested point + zoom,
+    // flying there or cutting straight to it as the request asks (iOS `set(region:animated:)`).
     LaunchedEffect(focusRequests, cameraPositionState) {
         focusRequests.collect { focus ->
-            cameraPositionState.animate(
-                CameraUpdateFactory.newLatLngZoom(focus.coordinate.toLatLng(), focus.zoom),
-            )
+            val update =
+                CameraUpdateFactory.newLatLngZoom(focus.coordinate.toLatLng(), focus.zoom)
+            if (focus.animated) {
+                cameraPositionState.animate(update)
+            } else {
+                cameraPositionState.move(update)
+            }
         }
     }
 
@@ -212,15 +218,24 @@ fun RewindMap(
             // Keep the Google logo and any attribution above the bottom preview strip. The same
             // inset is handed to the overlay so its marker placement matches the map's target.
             contentPadding = PaddingValues(bottom = stripHeight),
+            // The blue dot (iOS `showsUserLocation = true`). Strictly tied to the granted flag:
+            // switching it on without the permission throws SecurityException.
+            properties =
+                MapProperties(isMyLocationEnabled = state.locationState.isAccessGranted),
             // Mirror iOS RewindMapView: rotation and pitch (tilt) disabled; no Android-only zoom
-            // buttons or map toolbar (iOS MapKit has no such controls).
+            // buttons or map toolbar (iOS MapKit has no such controls). The SDK's own my-location
+            // button is off as well — ours lives in the floating menu, like iOS's.
             uiSettings =
                 MapUiSettings(
+                    myLocationButtonEnabled = false,
                     rotationGesturesEnabled = false,
                     tiltGesturesEnabled = false,
                     zoomControlsEnabled = false,
                     mapToolbarEnabled = false,
                 ),
+            // iOS `mapViewDidFinishLoadingMap` -> `.ui(.mapViewLoaded)`: the cue to ask for
+            // location access and start tracking.
+            onMapLoaded = { mapModel(MapAction.External.Ui.MapViewLoaded) },
         ) {
             // Invisible SDK markers, one per annotation, are the tap targets: the SDK hit-tests them
             // natively (exact bounds + z-order, no guessing) and never blocks a map drag, so a swipe
@@ -266,6 +281,12 @@ fun RewindMap(
                 // iOS routes the search glyph to `AppAction.search(.present)`, not to the map
                 // reducer — so does this one, through the root view.
                 onSearchClick = onSearchClick,
+                // The location glyph, unlike search, is the map reducer's own business (iOS
+                // `.locationTap` -> `.right(.locationButtonTapped)`).
+                locationAccessGranted = state.locationState.isAccessGranted,
+                onLocationClick = {
+                    mapModel(MapAction.External.Ui.LocationButtonTapped)
+                },
                 // Side insets stay inside FloatingMenu (they belong to the animated node there —
                 // see its expansion comment); only the gap above the strip is set here.
                 modifier =

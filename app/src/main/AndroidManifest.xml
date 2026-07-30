@@ -6,6 +6,14 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <!--
+        Both location permissions are declared and both are requested together: on Android 12+ the
+        user may grant the coarse one only, and — like iOS with reduced accuracy — we do not
+        distinguish precision, any grant counts as access.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!--
         Package visibility (Android 11+): without this, PackageManager hides every other app from
         us, so `canOpenUrl`'s resolveActivity() returns null for any https link and the "find route"
         menu silently did nothing — nothing was wrong with the links themselves.

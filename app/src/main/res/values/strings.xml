@@ -38,4 +38,6 @@
     <string name="search_start_typing">Start typing</string>
     <string name="search_insert_suggest">Insert into query</string>
     <string name="search_clear">Clear</string>
+    <string name="go_to_settings">Go to Settings</string>
+    <string name="my_location">My location</string>
 </resources>

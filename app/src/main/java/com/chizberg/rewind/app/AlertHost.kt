@@ -30,8 +30,18 @@ fun RewindAlert(
         confirmButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.ok)) }
         },
+        // The one non-stock slot: an alert's own action if it carries one (M13.5's "Go to
+        // Settings"), otherwise an error's "Copy to clipboard". Either way it dismisses, as every
+        // `UIAlertAction` does.
         dismissButton =
-            params.message
+            params.action?.let { action ->
+                {
+                    TextButton(onClick = {
+                        action.handler()
+                        onDismiss()
+                    }) { Text(stringResource(action.kind.labelRes)) }
+                }
+            } ?: params.message
                 ?.takeIf { params.isError }
                 ?.let { message ->
                     {
@@ -43,3 +53,10 @@ fun RewindAlert(
                 },
     )
 }
+
+/** The label an [AlertParams.Action] is rendered with — resolved here, never in the reducer. */
+private val AlertParams.Action.Kind.labelRes: Int
+    get() =
+        when (this) {
+            AlertParams.Action.Kind.OpenSettings -> R.string.go_to_settings
+        }
