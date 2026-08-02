@@ -307,10 +307,11 @@ private fun ControlsPanel(
 
 /**
  * One control in the toolbar row. Port of the iOS `FloatingMenuButton` /
- * `TitledFloatingMenuButton` pair: a glyph that fills with `secondaryContainer` while [checked],
- * naming its new state to the right for a second whenever [title] changes and then withdrawing
- * (iOS `ValueChangeIndicator(value: title, duration: 1)`). [isActive] is iOS's accent tint for a
- * control that is doing something while unchecked — the one brand accent in the chrome.
+ * `TitledFloatingMenuButton` pair: a glyph whose pill fills with the accent while [checked], naming
+ * its new state to the right for a second whenever [title] changes and then withdrawing (iOS
+ * `ValueChangeIndicator(value: title, duration: 1)`). [isActive] is iOS's accent tint for a control
+ * that is doing something while unchecked — the one brand accent in the chrome, which the checked
+ * fill borrows rather than adding a second one.
  *
  * Sized to a 48dp pill so it nests concentrically inside the panel's 28dp corner (48/2 + 4dp panel
  * padding = 28), and it stays a pill once a title widens it. Semantics are set here rather than on
@@ -331,15 +332,24 @@ private fun MenuToggle(
 ) {
     // Everything that can change while the control stays on screen animates: the fill and the glyph
     // colour cross-fade, and the label expands the pill instead of snapping its width.
+    //
+    // On/off is stated by an inversion, not by a tonal step: checked fills the whole pill with the
+    // accent and paints the glyph in the colour the pill used to be. The tonal
+    // `secondaryContainer` fill this used to wear is what M3 hands you by default, and on a panel
+    // that is itself a light container it left barely a shade between a filter that is on and one
+    // that is not — over a busy map, unreadable at a glance. `primary`/`onPrimary` is the stock
+    // filled icon-toggle pairing, and it keeps the chrome down to the single accent it already
+    // spends on [isActive] and on the badge: an accent-tinted glyph means "this filter is doing
+    // something", an accent-filled pill means "and its panel is open".
     val containerColor by
         animateColorAsState(
-            if (checked) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+            if (checked) MaterialTheme.colorScheme.primary else Color.Transparent,
             label = "menuToggleContainer",
         )
     val contentColor by
         animateColorAsState(
             when {
-                checked -> MaterialTheme.colorScheme.onSecondaryContainer
+                checked -> MaterialTheme.colorScheme.onPrimary
                 isActive -> MaterialTheme.colorScheme.primary
                 else -> MaterialTheme.colorScheme.onSurfaceVariant
             },
@@ -385,7 +395,9 @@ private fun MenuToggle(
         ) {
             BadgedBox(
                 badge = {
-                    if (badged) Badge(containerColor = MaterialTheme.colorScheme.primary)
+                    // Rides the glyph's own colour, so it stays legible once the pill fills with
+                    // the accent the dot would otherwise be painted in.
+                    if (badged) Badge(containerColor = contentColor)
                 },
             ) {
                 Icon(icon, contentDescription = null)
