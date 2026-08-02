@@ -87,4 +87,14 @@
     <string name="onboarding_date">Әр суреттің орны мен күні бар. Күнге сәйкес түс тағайындалған</string>
     <string name="onboarding_pastvu">Rewind барлық тарихи фотосуреттерді, картиналарды және олармен байланысты деректерді алу үшін PastVu API пайдаланады.</string>
     <string name="onboarding_location">Rewind сізге жақын жердегі фотосуреттер мен картиналарды көрсету үшін орналасқан жеріңізді қажет етеді. Онсыз да қолданбаны пайдалана аласыз</string>
+
+    <!-- M14: then/now comparison -->
+    <string name="action_compare">Салыстыру</string>
+    <string name="action_compare_street_view">Google Street View-мен салыстыру</string>
+    <string name="comparison_saved_to_photos">Фотоларға сақталды</string>
+    <string name="comparison_retake">Қайта түсіру</string>
+    <string name="comparison_style_side_by_side">Қатар</string>
+    <string name="comparison_style_card_on_card">Карточка үстінде карточка</string>
+    <string name="comparison_zoom_in">Жақындату</string>
+    <string name="comparison_zoom_out">Алыстату</string>
 </resources>

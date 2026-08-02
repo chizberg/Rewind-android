@@ -1,9 +1,11 @@
 package com.chizberg.rewind.network
 
+import com.chizberg.rewind.domain.Coordinate
 import com.chizberg.rewind.domain.ImageRequestFilters
 import com.chizberg.rewind.domain.ModelCluster
 import com.chizberg.rewind.domain.ModelImage
 import com.chizberg.rewind.domain.ModelImageDetails
+import com.chizberg.rewind.domain.StreetViewAvailability
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -11,6 +13,7 @@ import kotlinx.coroutines.withContext
 data class RewindRemotes(
     val annotations: Remote<AnnotationLoadingParams, Pair<List<ModelImage>, List<ModelCluster>>>,
     val imageDetails: Remote<Int, ModelImageDetails>,
+    val streetViewAvailability: Remote<Coordinate, StreetViewAvailability>,
 ) {
     companion object
 }
@@ -51,5 +54,16 @@ operator fun RewindRemotes.Companion.invoke(requestPerformer: RequestPerformer):
         Remote<Int, ModelImageDetails> { cid ->
             ModelImageDetails(requestPerformer.perform(Request.imageDetails(cid)))
         }.exponentialBackoff()
-    return RewindRemotes(annotations = annotations, imageDetails = imageDetails)
+    // No `exponentialBackoff()` here, exactly as on iOS: the two PastVu remotes above are wrapped,
+    // this one and M15's translate are not. A retried metadata lookup would only delay the
+    // "unavailable" alert the comparison screen is waiting on.
+    val streetViewAvailability =
+        Remote<Coordinate, StreetViewAvailability> { coordinate ->
+            requestPerformer.perform(Request.streetViewAvailability(coordinate))
+        }
+    return RewindRemotes(
+        annotations = annotations,
+        imageDetails = imageDetails,
+        streetViewAvailability = streetViewAvailability,
+    )
 }

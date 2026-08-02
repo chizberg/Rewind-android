@@ -14,6 +14,15 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
     <!--
+        The comparison screen's camera half. Not required to install: the Street View comparison,
+        and the whole rest of the app, work on a device without one.
+    -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature
+        android:name="android.hardware.camera.any"
+        android:required="false" />
+
+    <!--
         Package visibility (Android 11+): without this, PackageManager hides every other app from
         us, so `canOpenUrl`'s resolveActivity() returns null for any https link and the "find route"
         menu silently did nothing — nothing was wrong with the links themselves.

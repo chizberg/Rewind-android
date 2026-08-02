@@ -1,11 +1,15 @@
 package com.chizberg.rewind.network
 
+import com.chizberg.rewind.BuildConfig
+import com.chizberg.rewind.domain.Coordinate
+import com.chizberg.rewind.domain.StreetViewAvailability
 import com.chizberg.rewind.network.dto.ByBoundsResponse
 import com.chizberg.rewind.network.dto.GiveForPageResponse
 import com.chizberg.rewind.network.dto.NetworkCluster
 import com.chizberg.rewind.network.dto.NetworkImage
 import com.chizberg.rewind.network.dto.NetworkImageDetails
 import com.chizberg.rewind.network.dto.networkJson
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -26,6 +30,10 @@ class Request<Response>(
 }
 
 private const val PASTVU_API = "https://api.pastvu.com/api2"
+
+/** Google's REST host — Street View metadata now, Cloud Translation in M15 (key B, see
+ *  `secrets.defaults.properties`). */
+private const val GOOGLE_MAPS_API = "https://maps.googleapis.com/maps/api"
 
 private fun isLocalWork(zoom: Int): Boolean = zoom >= 17
 
@@ -84,6 +92,94 @@ fun Request.Companion.byBounds(
             (response.result.photos ?: emptyList()) to (response.result.clusters ?: emptyList())
         },
     )
+
+/**
+ * Street View metadata — is there a panorama at [coordinate], and from when.
+ * Port of iOS `Network.streetViewAvailability`.
+ * See https://developers.google.com/maps/documentation/streetview/metadata
+ *
+ * The quirk to keep: **any** status other than `OK` becomes
+ * [StreetViewAvailability.Unavailable] — `ZERO_RESULTS`, `OVER_QUERY_LIMIT` and `REQUEST_DENIED`
+ * are not told apart, so a spent quota reads to the user as "no panorama here". An unknown status
+ * string is a decoding failure (as on iOS, whose `Status` enum only knows the seven documented
+ * values), which the caller swallows — see the reducer's `viewWillAppear`.
+ *
+ * The key is read here rather than injected, mirroring iOS reading `Secrets.googleApiKey` inside
+ * this very file.
+ */
+fun Request.Companion.streetViewAvailability(
+    coordinate: Coordinate,
+): Request<StreetViewAvailability> =
+    Request(
+        makeRequest = {
+            val url =
+                "$GOOGLE_MAPS_API/streetview/metadata"
+                    .toHttpUrl()
+                    .newBuilder()
+                    .addQueryParameter(
+                        "location",
+                        "${coordinate.latitude},${coordinate.longitude}",
+                    ).addQueryParameter("key", BuildConfig.GOOGLE_REST_API_KEY)
+                    .build()
+            OkHttpRequest.Builder().url(url).build()
+        },
+        parseResult = { bytes ->
+            val response =
+                networkJson.decodeFromString<StreetViewMetadataResponse>(bytes.decodeToString())
+            if (response.status == StreetViewMetadataResponse.Status.Ok) {
+                StreetViewAvailability.Available(extractYear(response.date))
+            } else {
+                StreetViewAvailability.Unavailable
+            }
+        },
+    )
+
+@Serializable
+private data class StreetViewMetadataResponse(
+    val status: Status,
+    /** `"YYYY-MM"` when a panorama exists; absent otherwise. */
+    val date: String? = null,
+) {
+    @Serializable
+    enum class Status {
+        @SerialName("OK")
+        Ok,
+
+        @SerialName("ZERO_RESULTS")
+        ZeroResults,
+
+        @SerialName("NOT_FOUND")
+        NotFound,
+
+        @SerialName("OVER_QUERY_LIMIT")
+        OverQueryLimit,
+
+        @SerialName("REQUEST_DENIED")
+        RequestDenied,
+
+        @SerialName("INVALID_REQUEST")
+        InvalidRequest,
+
+        @SerialName("UNKNOWN_ERROR")
+        UnknownError,
+    }
+}
+
+/**
+ * The year out of the metadata's `"YYYY-MM"` date. Port of iOS `extractYear(date:)`: the first
+ * `-`-separated piece, which has to be all digits — anything else (a missing date on an `OK`
+ * response, a reformatted one) throws rather than guessing a year for the label.
+ */
+private fun extractYear(date: String?): Int {
+    val year =
+        date
+            ?.trim()
+            ?.split("-")
+            ?.firstOrNull { it.isNotEmpty() }
+            ?.takeIf { piece -> piece.all { it.isDigit() } }
+            ?.toIntOrNull()
+    return year ?: throw NetworkError.ParsingFailure(desc = "Invalid date format: $date")
+}
 
 /** `photo.giveForPage`. Port of iOS `Network.imageDetails`. */
 fun Request.Companion.imageDetails(cid: Int): Request<NetworkImageDetails> =

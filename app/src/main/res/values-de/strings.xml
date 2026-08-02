@@ -87,4 +87,14 @@
     <string name="onboarding_date">Jedes Bild hat einen Standort und ein Datum. Dem Datum entspricht eine Farbe</string>
     <string name="onboarding_pastvu">Rewind verwendet die PastVu-API, um alle historischen Fotos, Gemälde und die zugehörigen Daten abzurufen.</string>
     <string name="onboarding_location">Rewind benötigt deinen Standort, um Fotos und Gemälde in deiner Nähe anzuzeigen. Ohne diese Berechtigung kannst du die App trotzdem nutzen</string>
+
+    <!-- M14: then/now comparison -->
+    <string name="action_compare">Vergleichen</string>
+    <string name="action_compare_street_view">Mit Google Street View vergleichen</string>
+    <string name="comparison_saved_to_photos">In Fotos gesichert</string>
+    <string name="comparison_retake">Neu aufnehmen</string>
+    <string name="comparison_style_side_by_side">Nebeneinander</string>
+    <string name="comparison_style_card_on_card">Karte auf Karte</string>
+    <string name="comparison_zoom_in">Vergrößern</string>
+    <string name="comparison_zoom_out">Verkleinern</string>
 </resources>

@@ -87,4 +87,14 @@
     <string name="onboarding_date">Svaka slika ima lokaciju i datum. Datumu odgovara boja</string>
     <string name="onboarding_pastvu">Rewind koristi PastVu API za dobijanje svih istorijskih fotografija, slika i njihovih pratećih podataka.</string>
     <string name="onboarding_location">Rewind treba vašu lokaciju da bi prikazivao fotografije i slike u vašoj blizini. Bez toga i dalje možete koristiti aplikaciju</string>
+
+    <!-- M14: then/now comparison -->
+    <string name="action_compare">Uporedi</string>
+    <string name="action_compare_street_view">Uporedi sa Google Street View</string>
+    <string name="comparison_saved_to_photos">Sačuvano u Fotografije</string>
+    <string name="comparison_retake">Slikaj ponovo</string>
+    <string name="comparison_style_side_by_side">Jedno pored drugog</string>
+    <string name="comparison_style_card_on_card">Kartica na kartici</string>
+    <string name="comparison_zoom_in">Uvećaj</string>
+    <string name="comparison_zoom_out">Umanji</string>
 </resources>

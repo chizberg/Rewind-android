@@ -109,6 +109,13 @@ dependencies {
     // billed per session token. Runs on the same MAPS_API_KEY as the map (see
     // secrets.defaults.properties), so no new secret is introduced.
     implementation(libs.places)
+    // M14: the comparison screen's camera half — Preview + ImageCapture bound to the screen's
+    // lifecycle (iOS AVCaptureSession + AVCapturePhotoOutput), with camera-view's PreviewView as
+    // the surface the composition hands it.
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
     // The full-screen photo viewer (M9's "telephoto or hand-rolled" call): pan bounded to the

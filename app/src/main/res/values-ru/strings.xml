@@ -87,4 +87,14 @@
     <string name="onboarding_date">У всего есть локация и дата. Дате соответствует цвет</string>
     <string name="onboarding_pastvu">Rewind использует PastVu API для получения всех исторических фотографий, картин и данных о них</string>
     <string name="onboarding_location">Rewind нужна ваша локация чтобы показывать фотографии и картины рядом. Без этого доступа приложение тоже можно использовать</string>
+
+    <!-- M14: then/now comparison -->
+    <string name="action_compare">Сравнить</string>
+    <string name="action_compare_street_view">Сравнить с панорамами Google</string>
+    <string name="comparison_saved_to_photos">Сохранено в Фото</string>
+    <string name="comparison_retake">Переснять</string>
+    <string name="comparison_style_side_by_side">Рядом</string>
+    <string name="comparison_style_card_on_card">Карточка на карточке</string>
+    <string name="comparison_zoom_in">Приблизить</string>
+    <string name="comparison_zoom_out">Отдалить</string>
 </resources>

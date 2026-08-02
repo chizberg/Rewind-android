@@ -58,12 +58,22 @@ class ImageExport(
      * runtime permission is involved: MediaStore owns the row we created (minSdk 31).
      */
     suspend fun save(image: ModelImage) {
-        val bitmap = load(image)
+        save(load(image), fileName(image))
+    }
+
+    /**
+     * The same insert for pixels that never came from the loader — the comparison screen's
+     * composite (iOS hands `PHPhotoLibrary` its rendered `UIImage` in exactly the same way).
+     */
+    suspend fun save(
+        bitmap: Bitmap,
+        fileName: String,
+    ) {
         withContext(Dispatchers.IO) {
             val resolver = appContext.contentResolver
             val pending =
                 ContentValues().apply {
-                    put(MediaStore.Images.Media.DISPLAY_NAME, fileName(image))
+                    put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
                     put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
                     put(
                         MediaStore.Images.Media.RELATIVE_PATH,
@@ -102,11 +112,29 @@ class ImageExport(
      * `FileUriExposedException`.
      */
     suspend fun share(content: ShareContent) {
-        val bitmap = load(content.image)
+        share(
+            bitmap = load(content.image),
+            fileName = fileName(content.image),
+            title = content.title,
+            text = content.text(),
+        )
+    }
+
+    /**
+     * The same share sheet for pixels of our own making — the comparison composite. iOS builds its
+     * activity controller from the rendered image, the photo's title and its pastvu link, with no
+     * description at all (`makeShareVC(description: nil)`), and that is what [text] carries here.
+     */
+    suspend fun share(
+        bitmap: Bitmap,
+        fileName: String,
+        title: String,
+        text: String,
+    ) {
         val uri =
             withContext(Dispatchers.IO) {
                 val dir = File(appContext.cacheDir, SHARE_DIR).apply { mkdirs() }
-                val file = File(dir, fileName(content.image))
+                val file = File(dir, fileName)
                 file.outputStream().use { bitmap.writeJpeg(it) }
                 FileProvider.getUriForFile(
                     appContext,
@@ -118,11 +146,11 @@ class ImageExport(
             Intent(Intent.ACTION_SEND).apply {
                 type = "image/jpeg"
                 putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_TEXT, content.text())
-                putExtra(Intent.EXTRA_TITLE, content.title)
+                putExtra(Intent.EXTRA_TEXT, text)
+                putExtra(Intent.EXTRA_TITLE, title)
                 // The grant flag alone covers EXTRA_STREAM on modern targets, but the clip data is
                 // what the chooser's own preview reads to show a thumbnail.
-                clipData = ClipData.newUri(appContext.contentResolver, content.title, uri)
+                clipData = ClipData.newUri(appContext.contentResolver, title, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
         appContext.startActivity(
@@ -156,6 +184,11 @@ private fun Bitmap.writeJpeg(stream: OutputStream) {
 }
 
 private fun fileName(image: ModelImage): String = "pastvu_${image.cid}.jpg"
+
+/** The comparison composite of the same photo — a sibling name, so the two sit together in the
+ *  album. A second shot of the same photo becomes "… (1).jpg", MediaStore's own doing (as on iOS,
+ *  where a second save is a second asset). */
+fun comparisonFileName(cid: Int): String = "pastvu_${cid}_comparison.jpg"
 
 /**
  * Title, description and link as one blob — see [ImageExport.share]. The description is PastVu HTML

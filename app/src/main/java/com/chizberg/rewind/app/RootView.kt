@@ -80,6 +80,10 @@ fun RootView(modifier: Modifier = Modifier) {
         },
     )
 
+    // The comparison screen holds the device in portrait while it is up; iOS answers the same
+    // request from its AppDelegate, out of the same graph property.
+    OrientationLockHost(graph.orientationLock)
+
     CompositionLocalProvider(LocalRewindImageLoader provides graph.imageLoader) {
         // The map is the permanent base of the overlay stack: always composed (never a navigation
         // destination, so its MapView is never torn down), receded behind whatever opens over it.

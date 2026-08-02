@@ -33,9 +33,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.CenterFocusWeak
 import androidx.compose.material.icons.rounded.Directions
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.DownloadDone
+import androidx.compose.material.icons.rounded.Panorama
 import androidx.compose.material.icons.rounded.Place
 import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.Share
@@ -82,6 +84,7 @@ import com.chizberg.rewind.R
 import com.chizberg.rewind.app.RewindAlert
 import com.chizberg.rewind.domain.GradientScheme
 import com.chizberg.rewind.domain.ModelImage
+import com.chizberg.rewind.features.comparison.ui.ComparisonScreen
 import com.chizberg.rewind.features.details.ImageDetailsAction
 import com.chizberg.rewind.features.details.ImageDetailsModel
 import com.chizberg.rewind.features.details.ImageDetailsState
@@ -218,6 +221,19 @@ fun ImageDetailsView(
             isImageSaved = state.isImageSaved,
             onSave = { model(ImageDetailsAction.FullscreenPreview.SaveImage) },
             onDismiss = { model(ImageDetailsAction.FullscreenPreview.Dismiss) },
+        )
+    }
+
+    // The then/now comparison (M14), a layer of its own over these details — iOS presents it as a
+    // `.fullScreenCover` from here. Its reducer cannot close itself, so both the back gesture and
+    // its own `shouldDismiss` come back through this dismiss.
+    Overlay(
+        target = state.comparison,
+        onBack = { model(ImageDetailsAction.Comparison.Dismiss) },
+    ) { deps ->
+        ComparisonScreen(
+            deps = deps,
+            onDismiss = { model(ImageDetailsAction.Comparison.Dismiss) },
         )
     }
 
@@ -657,6 +673,10 @@ private val ImageDetailsAction.Button.label: String
         stringResource(
             when (this) {
                 ImageDetailsAction.Button.Favorite -> R.string.action_favorite
+                ImageDetailsAction.Button.CompareCamera -> R.string.action_compare
+                ImageDetailsAction.Button.CompareStreetView ->
+                    R.string.action_compare_street_view
+
                 ImageDetailsAction.Button.ShowOnMap -> R.string.action_show_on_map
                 ImageDetailsAction.Button.Share -> R.string.action_share
                 ImageDetailsAction.Button.SaveImage -> R.string.action_save_image
@@ -672,6 +692,10 @@ private fun ImageDetailsAction.Button.icon(
     when (this) {
         ImageDetailsAction.Button.Favorite ->
             if (isFavorite) Icons.Rounded.Star else Icons.Rounded.StarBorder
+
+        // iOS `camera.viewfinder` / `pano`, in the design pack's Material equivalents.
+        ImageDetailsAction.Button.CompareCamera -> Icons.Rounded.CenterFocusWeak
+        ImageDetailsAction.Button.CompareStreetView -> Icons.Rounded.Panorama
 
         ImageDetailsAction.Button.ShowOnMap -> Icons.Rounded.Place
         ImageDetailsAction.Button.Share -> Icons.Rounded.Share

@@ -4,9 +4,12 @@ import com.chizberg.rewind.app.AlertParams
 import com.chizberg.rewind.app.errorAlert
 import com.chizberg.rewind.core.redux.AsyncEffect
 import com.chizberg.rewind.core.redux.Reducer
+import com.chizberg.rewind.core.util.OrientationLock
 import com.chizberg.rewind.domain.Coordinate
 import com.chizberg.rewind.domain.ModelImage
 import com.chizberg.rewind.domain.ModelImageDetails
+import com.chizberg.rewind.features.comparison.ComparisonState
+import com.chizberg.rewind.features.comparison.ComparisonViewDeps
 import com.chizberg.rewind.network.Remote
 import kotlinx.coroutines.CoroutineScope
 import java.net.URI
@@ -26,6 +29,14 @@ typealias ImageSaver = suspend (ModelImage) -> Unit
 
 /** Hands the photo to the system share sheet. Port of iOS `makeShareVC` + its `.sheet`. */
 typealias ImageSharer = suspend (ShareContent) -> Unit
+
+/**
+ * Builds one comparison screen for this photo. iOS calls `makeComparisonViewDeps` inline here (the
+ * camera and the Street View lookup are values it can construct anywhere); ours is a lambda from
+ * the graph, so the platform halves — CameraX, the orientation sensor, the gallery — stay out of
+ * this JVM-only reducer.
+ */
+typealias ComparisonFactory = (ModelImage, ComparisonState.CaptureMode) -> ComparisonViewDeps
 
 /**
  * What the share sheet carries. iOS passes four activity items (image, title, description, URL);
@@ -56,8 +67,7 @@ typealias ImageDetailsModel = Reducer<ImageDetailsState, ImageDetailsAction>
  *   loader; the reducer only tracks that a save succeeded ([isImageSaved], as on iOS).
  * - **no `Identified` wrapper** around the nested details / alert: Compose overlays key off content
  *   presence, so plain nullables suffice.
- * - **translation** ([details]-driven `TranslationState`) and **comparison** (`comparisonDeps`) are
- *   M15 / M14; their branches join then.
+ * - **translation** ([details]-driven `TranslationState`) is M15; its branches join then.
  */
 data class ImageDetailsState(
     val image: ModelImage,
@@ -70,6 +80,8 @@ data class ImageDetailsState(
     val mapOptionsPresented: Boolean = false,
     val fullscreenPresented: Boolean = false,
     val anotherImageModel: ImageDetailsModel? = null,
+    /** iOS `comparisonDeps`: the comparison screen while it is up (M14). */
+    val comparison: ComparisonViewDeps? = null,
     val alert: AlertParams? = null,
 )
 
@@ -83,8 +95,17 @@ sealed interface ImageDetailsAction {
         val url: String,
     ) : ImageDetailsAction
 
-    /** The action-grid buttons that are implemented in M9 (compare buttons arrive with M14). */
-    enum class Button { Favorite, ShowOnMap, Share, SaveImage, ViewOnWeb, Route }
+    /** The action-grid buttons, in iOS's order. */
+    enum class Button {
+        Favorite,
+        CompareCamera,
+        CompareStreetView,
+        ShowOnMap,
+        Share,
+        SaveImage,
+        ViewOnWeb,
+        Route,
+    }
 
     data class OnButton(
         val button: Button,
@@ -106,6 +127,15 @@ sealed interface ImageDetailsAction {
 
         /** The save button of the viewer's own chrome (iOS `ZoomableImageScreen.saveImage`). */
         data object SaveImage : FullscreenPreview
+    }
+
+    /** iOS `ImageComparison`: the then/now screen, opened in one of its two fixed modes. */
+    sealed interface Comparison : ImageDetailsAction {
+        data class Present(
+            val mode: ComparisonState.CaptureMode,
+        ) : Comparison
+
+        data object Dismiss : Comparison
     }
 
     sealed interface AnotherImage : ImageDetailsAction {
@@ -168,6 +198,11 @@ fun makeImageDetailsModel(
     urlOpener: UrlOpener,
     saveImage: ImageSaver,
     shareImage: ImageSharer,
+    // The two comparison dependencies default to "there is no camera here", so a caller that never
+    // opens the screen (a reducer test) does not have to fabricate one. The graph always passes
+    // both.
+    makeComparison: ComparisonFactory = { _, _ -> error("No comparison factory was injected") },
+    setOrientationLock: (OrientationLock?) -> Unit = {},
     extractModelImage: (ModelImageDetails) -> ModelImage,
     scope: CoroutineScope,
 ): ImageDetailsModel =
@@ -180,6 +215,11 @@ fun makeImageDetailsModel(
                 actionButtons =
                     listOf(
                         ImageDetailsAction.Button.Favorite,
+                        // iOS offers these two on the phone only (`withUIIdiom(phone:pad: nil)`);
+                        // an Android tablet has a camera and Street View works there, so they are
+                        // offered on every form factor.
+                        ImageDetailsAction.Button.CompareCamera,
+                        ImageDetailsAction.Button.CompareStreetView,
                         ImageDetailsAction.Button.ShowOnMap,
                         ImageDetailsAction.Button.Share,
                         ImageDetailsAction.Button.SaveImage,
@@ -242,6 +282,30 @@ fun makeImageDetailsModel(
                         val next = !state.isFavorite
                         asyncEffect(AsyncEffect.perform { setFavorite(modelImage, next) })
                         state.copy(isFavorite = next)
+                    }
+
+                    ImageDetailsAction.Button.CompareCamera -> {
+                        asyncEffect(
+                            AsyncEffect.anotherAction(
+                                action =
+                                    ImageDetailsAction.Comparison.Present(
+                                        ComparisonState.CaptureMode.Camera,
+                                    ),
+                            ),
+                        )
+                        state
+                    }
+
+                    ImageDetailsAction.Button.CompareStreetView -> {
+                        asyncEffect(
+                            AsyncEffect.anotherAction(
+                                action =
+                                    ImageDetailsAction.Comparison.Present(
+                                        ComparisonState.CaptureMode.StreetView,
+                                    ),
+                            ),
+                        )
+                        state
                     }
 
                     ImageDetailsAction.Button.ShowOnMap -> {
@@ -323,6 +387,26 @@ fun makeImageDetailsModel(
                 state
             }
 
+            is ImageDetailsAction.Comparison.Present -> {
+                // iOS gates on its decoded `uiImage` and does nothing (bar an error haptic) until
+                // the full-quality photo is in. Ours has no bitmap to gate on — Coil draws the old
+                // half from its path, showing the cached rendition until the big one lands — so
+                // the screen simply opens.
+                effect { setOrientationLock(OrientationLock.Portrait) }
+                state.copy(comparison = makeComparison(modelImage, action.mode))
+            }
+
+            ImageDetailsAction.Comparison.Dismiss -> {
+                val comparison = state.comparison
+                effect {
+                    setOrientationLock(null)
+                    // ARC does this on iOS: the dismissed screen takes its camera session and its
+                    // orientation tracker with it (see ComparisonViewDeps.close).
+                    comparison?.close()
+                }
+                state.copy(comparison = null)
+            }
+
             is ImageDetailsAction.AnotherImage.Present -> {
                 val nested =
                     makeImageDetailsModel(
@@ -340,6 +424,8 @@ fun makeImageDetailsModel(
                         urlOpener = urlOpener,
                         saveImage = saveImage,
                         shareImage = shareImage,
+                        makeComparison = makeComparison,
+                        setOrientationLock = setOrientationLock,
                         extractModelImage = extractModelImage,
                         scope = scope,
                     )
