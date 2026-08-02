@@ -155,6 +155,13 @@ fun RewindMap(
     // Camera idle (movement stopped + projection ready) → feed the region + zoom to the reducer.
     LaunchedEffect(mapModel, cameraPositionState) {
         snapshotFlow {
+            // `position` is read for its subscription, not its value: `projection` is a plain
+            // getter over the map, not snapshot state, so this block re-runs only when something
+            // observable changes. `isMoving` alone is not enough — a programmatic `move()` (the
+            // first location fix, "show on map", search) flips it true and back inside one frame,
+            // the flow never re-reads, and the reducer keeps loading photos for wherever the map
+            // used to be. `position` is what the map writes on every camera idle.
+            cameraPositionState.position
             if (cameraPositionState.isMoving) {
                 null
             } else {
