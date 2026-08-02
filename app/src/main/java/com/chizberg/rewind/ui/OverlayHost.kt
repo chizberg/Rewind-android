@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -42,15 +43,51 @@ private const val REST_SCALE = 0.95f
 private const val DRAG_SCALE = 0.90f
 
 /** Corner radius of a pressed-in layer so it reads as a card, not a clipped rectangle. */
-private val RECEDE_CORNER = 20.dp
+private val RECEDE_CORNER = 28.dp
 
 /** How far a pressed-in layer is slid off the leading edge (a parallax under the layer above). */
 private const val LEADING_HIDDEN = 0.30f
 
-/** Peek offset of the shrinking top card toward the swiped edge, and its card look while detached. */
+/** Peek offset of the shrinking top card toward the swiped edge. */
 private val EDGE_MARGIN = 8.dp
-private val MAX_CORNER = 28.dp
-private val MAX_SHADOW = 6.dp
+
+/**
+ * How round and how lifted a layer gets while it is in motion, both of them at their strongest when
+ * the layer is fully detached (arriving, leaving, or dragged) and gone by the time it settles. The
+ * corners are generous on purpose — a moving screen should read as a card over the one behind it,
+ * and at the device's own corner radius it reads instead as the screen itself.
+ */
+private val MAX_CORNER = 36.dp
+private val MAX_SHADOW = 28.dp
+
+/**
+ * How far into a layer's travel it is already fully detached. Tied to the raw progress, the corner
+ * and the shadow are at their strongest while the layer is still off-screen and have all but faded
+ * by the time it crosses the display — the one stretch where they can actually be read. Held at full
+ * instead until the last third of the arrival, where the card drops them as it docks.
+ */
+private const val DETACHED_AT = 0.35f
+
+/** The pressed-in layer's own lift. Well under the moving card's — it is the one being covered, and
+ *  all that shows of it is a band at the top and bottom of the screen. */
+private val RECEDE_SHADOW = 16.dp
+
+/**
+ * The shadows are meant to be felt, not seen: they say which surface is on top and steer the eye
+ * toward the arriving one, and a transition where the user could point at a shadow would have
+ * spent attention on chrome instead. Elevation alone cannot say that — it buys width and darkness
+ * together, and the width is the part that makes a shadow soft — so the tint takes the darkness
+ * back out. A large [MAX_SHADOW] therefore spreads the gradient over a wide band, and this alpha
+ * keeps its deepest point (right at the card's edge, where the platform's own spot shadow is
+ * strongest) down to a few percent, thinning to nothing well before the band ends.
+ *
+ * Measured on the emulator rather than guessed, because the platform's own two lights are far
+ * apart: the spot alpha is 0.19 and the ambient one 0.039, and a card's *leading* edge — the edge
+ * the eye follows during a slide — is lit almost entirely by the ambient light. So this multiplier
+ * lands the leading edge around 2 % darker than the background and the band under a pressed-in
+ * card's top edge around 3.5 %. Below roughly 1.5 % a gradient that wide stops registering at all.
+ */
+private val ShadowTint = Color.Black.copy(alpha = 0.55f)
 
 /** M3 `PredictiveBackEasing` — most of the shrink lands in the first third of the swipe. */
 private val PredictiveBackEasing = CubicBezierEasing(0.1f, 0.1f, 0f, 1f)
@@ -71,8 +108,9 @@ internal class OverlayEntry {
      *  layer as a live back target. */
     var present by mutableStateOf(false)
 
-    /** Opaque layers (the list, details, viewer) get a black scrim behind them so their receding gap
-     *  reads black; the map is not opaque — its black comes from the window behind the SurfaceView. */
+    /** Opaque layers (the list, details, viewer) get a scrim behind them so their receding gap reads
+     *  as the app's background; the map is not opaque — it is backed from below instead, since
+     *  anything painted over it would seal its SurfaceView's hole punch. */
     var opaque by mutableStateOf(true)
 
     /** Set once by [Overlay]; both indirect through `rememberUpdatedState` so the latest lambda runs
@@ -129,7 +167,7 @@ internal val LocalOverlayStack =
  * Hosts the whole state-driven overlay stack over a persistent [base] (the map). Replaces the older
  * per-screen `OverlayScreen`: instead of each overlay opting into a `background` slot it can forget,
  * any screen anywhere under here calls [Overlay] and is stacked automatically — the layer beneath it
- * recedes, an opaque layer gets its black backing, and the top layer owns the system back gesture.
+ * recedes, an opaque layer gets its backing, and the top layer owns the system back gesture.
  * Nesting is free: an [Overlay] inside another overlay's content just registers one layer higher.
  *
  * The motion mirrors the system's own screens (Settings): the two neighbouring layers move as a pair
@@ -144,21 +182,34 @@ fun OverlayHost(
     modifier: Modifier = Modifier,
 ) {
     val stack = remember { OverlayStack() }
+    // What shows through wherever a layer has moved out of the way: the app's own background, so a
+    // transition reads as one app moving between its screens instead of a window opening onto the
+    // system. Every gap in the stack is painted with it — the scrim of an opaque layer below, and
+    // the backdrop below the map.
+    val backdrop = MaterialTheme.colorScheme.background
 
     CompositionLocalProvider(LocalOverlayStack provides stack) {
         Box(modifier.fillMaxSize()) {
-            // The base (map) recedes behind whatever sits lowest in the stack; it is not opaque, so
-            // it has no Compose scrim — its gap shows the black window behind the map's SurfaceView.
+            // The base (map) has no scrim of its own: it is not opaque, and a Compose background
+            // ABOVE it would seal the hole its SurfaceView punches through the window and black out
+            // the whole composite (see themes.xml). Painted BELOW it instead — the punch clears the
+            // window buffer within the map's own bounds, so this only ever shows in the gap the
+            // pressed-in map leaves. Composed only while something is up over the map, so the map
+            // alone never pays for a full-screen fill it would cover anyway.
+            if (stack.childOf(-1) != null) {
+                Box(Modifier.fillMaxSize().background(backdrop))
+            }
             Box(Modifier.fillMaxSize().recede(stack.childOf(-1))) { base() }
 
             stack.entries.forEachIndexed { index, entry ->
                 if (!entry.rendered) return@forEachIndexed
                 // The whole layer slides/scales for its own enter/exit and back-drag; inside it, a
-                // black scrim (opaque layers only) stays put behind the content, which itself recedes
-                // when a deeper layer opens over it — so the receding content's gap reads black.
+                // scrim (opaque layers only) stays put behind the content, which itself recedes
+                // when a deeper layer opens over it — so the receding content's gap reads as the
+                // app's background rather than as a hole in the layer.
                 Box(Modifier.fillMaxSize().enterExit(entry)) {
                     if (entry.opaque) {
-                        Box(Modifier.fillMaxSize().background(Color.Black))
+                        Box(Modifier.fillMaxSize().background(backdrop))
                     }
                     Box(Modifier.fillMaxSize().recede(stack.childOf(index))) { entry.content() }
                 }
@@ -197,14 +248,14 @@ fun OverlayHost(
 
 /**
  * Presents [content] as a layer in the enclosing [OverlayHost] while [target] is non-null. The
- * receding of the layer below, the black backing for [opaque] layers, and the back gesture are all
- * the host's job — a caller only says "here is my overlay and how to dismiss it".
+ * receding of the layer below, the backing for [opaque] layers, and the back gesture are all the
+ * host's job — a caller only says "here is my overlay and how to dismiss it".
  *
  * @param target non-null means this layer is up; clear it from [onBack].
  * @param onBack how the back gesture dismisses this layer, or `null` if it cannot be backed out of
  *   at all (the onboarding). A null handler is not the same as an empty one: the layer stops being a
  *   back target entirely, so the gesture never grabs it and leaves it sitting half-dragged.
- * @param opaque whether this layer paints a full-screen surface (so it needs a black backing when it
+ * @param opaque whether this layer paints a full-screen surface (so it needs a backing when it
  *   recedes). The map passes `false`; every real screen leaves the default `true`.
  */
 @Composable
@@ -255,7 +306,8 @@ fun <T : Any> Overlay(
 }
 
 /** The pressed-in transform a layer wears while [child] (the layer directly above it) is up: scaled
- *  back, slid off the leading edge, rounded — driven by that child's presence and its back-drag. */
+ *  back, slid off the leading edge, rounded and lifted off the backdrop — driven by that child's
+ *  presence and its back-drag. */
 private fun Modifier.recede(child: OverlayEntry?): Modifier =
     graphicsLayer {
         val open = child?.presence?.value ?: 0f
@@ -266,6 +318,9 @@ private fun Modifier.recede(child: OverlayEntry?): Modifier =
         scaleY = scale
         translationX = -LEADING_HIDDEN * size.width * open
         shape = RoundedCornerShape(RECEDE_CORNER * open)
+        shadowElevation = RECEDE_SHADOW.toPx() * open
+        ambientShadowColor = ShadowTint
+        spotShadowColor = ShadowTint
         clip = true
     }
 
@@ -279,6 +334,7 @@ private fun Modifier.enterExit(entry: OverlayEntry): Modifier =
         val leaving = 1f - entry.presence.value
         val fromLeft = entry.edge == BackEventCompat.EDGE_LEFT
         val cardness = maxOf(dragged, leaving)
+        val detached = (cardness / DETACHED_AT).coerceAtMost(1f)
 
         val scale = lerp(1f, MIN_SCALE, cardness)
         scaleX = scale
@@ -290,8 +346,10 @@ private fun Modifier.enterExit(entry: OverlayEntry): Modifier =
             )
         translationX =
             (if (fromLeft) -1f else 1f) * EDGE_MARGIN.toPx() * dragged + size.width * leaving
-        shape = RoundedCornerShape(MAX_CORNER * cardness)
-        shadowElevation = MAX_SHADOW.toPx() * cardness
+        shape = RoundedCornerShape(MAX_CORNER * detached)
+        shadowElevation = MAX_SHADOW.toPx() * detached
+        ambientShadowColor = ShadowTint
+        spotShadowColor = ShadowTint
         clip = cardness > 0f
     }
 

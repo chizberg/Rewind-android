@@ -2,10 +2,12 @@
 <resources>
 
     <style name="Theme.Rewind" parent="android:Theme.Material.Light.NoActionBar">
-        <!-- Black sits behind the map's SurfaceView, so the gaps the pressed-in / slid-away map
-             leaves during an overlay transition read as black. It must live on the WINDOW, not a
-             Compose `.background()` over the map: an opaque background above a hole-punched
-             SurfaceView blacks out the whole composite. -->
+        <!-- What the window itself is filled with, i.e. what shows until the first composed frame
+             arrives, and what a hole-punched SurfaceView reveals if its surface is not up yet.
+             Nothing else reaches it: the gaps the pressed-in map leaves during an overlay
+             transition are painted in the app's own background colour by OverlayHost, BELOW the
+             map. Below, and never above — an opaque Compose background over a hole-punched
+             SurfaceView seals the punch and blacks out the whole composite. -->
         <item name="android:windowBackground">@android:color/black</item>
 
         <!-- Edge-to-edge in EVERY orientation. The default cutout mode only lets a window into the
