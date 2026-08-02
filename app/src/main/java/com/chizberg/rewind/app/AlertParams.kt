@@ -41,7 +41,25 @@ data class AlertParams(
 fun errorAlert(
     title: String,
     error: Throwable,
-): AlertParams = AlertParams(title = title, message = error.toString())
+): AlertParams = AlertParams(title = title, message = error.describe())
+
+/**
+ * What the alert shows for a failure. Like iOS's `String(describing: error)` this is a developer's
+ * description, not a user's — that is what the "Copy to clipboard" button is for.
+ *
+ * `Throwable.toString()` is not the equivalent: on an exception carrying no message of its own
+ * (`NetworkError.ConnectionFailure`, which only wraps a cause) it prints the fully-qualified class
+ * name — package, `$` and all — and drops the underlying failure entirely, so "no internet" reaches
+ * the user as `com.chizberg.rewind.network.NetworkError$ConnectionFailure`. Swift's enum
+ * description carries the associated error along, so the chain is walked here to match.
+ */
+private fun Throwable.describe(): String =
+    generateSequence(this) { it.cause }
+        .joinToString(separator = " ← ") { link ->
+            val name = link::class.simpleName ?: link::class.java.name
+            val message = link.message
+            if (message.isNullOrBlank()) name else "$name: $message"
+        }
 
 /** iOS `AlertParams.info`: a plain message with a single OK — nothing to copy. */
 fun infoAlert(
