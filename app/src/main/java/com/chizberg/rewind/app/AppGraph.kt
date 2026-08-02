@@ -12,7 +12,6 @@ import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import com.chizberg.rewind.BuildConfig
 import com.chizberg.rewind.core.redux.Property
 import com.chizberg.rewind.core.redux.Reducer
-import com.chizberg.rewind.domain.GradientScheme
 import com.chizberg.rewind.domain.ImageSorting
 import com.chizberg.rewind.domain.ModelImage
 import com.chizberg.rewind.domain.ModelImageDetails
@@ -26,8 +25,12 @@ import com.chizberg.rewind.features.map.MapAction
 import com.chizberg.rewind.features.map.MapState
 import com.chizberg.rewind.features.map.makeLocationModel
 import com.chizberg.rewind.features.map.makeMapModel
+import com.chizberg.rewind.features.onboarding.OnboardingModel
+import com.chizberg.rewind.features.onboarding.OnboardingStorage
+import com.chizberg.rewind.features.onboarding.makeOnboardingViewModel
 import com.chizberg.rewind.features.search.makeSearchModel
 import com.chizberg.rewind.features.settings.SettingsState
+import com.chizberg.rewind.features.settings.makeSettingsViewModel
 import com.chizberg.rewind.network.RequestPerformer
 import com.chizberg.rewind.network.RewindRemotes
 import com.chizberg.rewind.network.invoke
@@ -42,7 +45,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import java.io.File
@@ -137,10 +142,10 @@ class AppGraph(
      * reducer (the Favorites list). Persists through [favoritesStorage]'s synchronous Property. */
     val favoritesModel: FavoritesModel = makeFavoritesModel(favoritesStorage.property, scope)
 
-    // Persisted user settings (M10 stores only the sort order; the rest of SettingsState and its
-    // editor land in M13). Same synchronous-cache JsonPreference as favorites, under the "settings"
-    // key — so the sort order now survives a relaunch, matching iOS.
-    private val settings =
+    // Persisted user settings, the same synchronous-cache JsonPreference as favorites, under the
+    // "settings" key (iOS's own key). The whole SettingsState travels as one blob, so a relaunch
+    // brings back the sort order, the cluster-preview switch and the tint scheme together.
+    private val settingsStorage =
         JsonPreference(
             dataStore = dataStore,
             key = "settings",
@@ -149,18 +154,44 @@ class AppGraph(
             scope = scope,
         )
 
-    // The image-list sort order. Seeded from [settings] and mirrored back on every change. Held in a
-    // StateFlow (not a plain var) so the map can react to a change the same way iOS does (see the
-    // init subscription); the [Property] keeps the synchronous get/set the list reducer expects and
-    // also writes through to [settings]. Shared with the map so its previews follow the same order.
-    private val sortingFlow = MutableStateFlow(settings.value.sorting)
+    // Port of iOS `makeSettings(storage:)` -> `ObservableProperty<SettingsState>`: ONE observable
+    // holder in front of the persisted blob, which everything else derives from. Whoever writes it
+    // — a list's sort menu, the settings screen writing the whole blob back — feeds the same flow,
+    // so the two subscriptions in `init` (iOS's two `onChange`s) see every change regardless of
+    // source.
+    private val settingsFlow = MutableStateFlow(settingsStorage.value)
+
+    private val settings: Property<SettingsState> =
+        Property(
+            getter = { settingsFlow.value },
+            setter = { newSettings ->
+                settingsFlow.value = newSettings
+                settingsStorage.value = newSettings
+            },
+        )
+
+    /** iOS reads `settings.value.openClusterPreviews` synchronously when a cluster is tapped; ours
+     * is read at the same moment, only from the UI (a cluster tap picks its route in `RewindMap` —
+     * the camera lives in Compose). One stable lambda, so passing it never churns recomposition. */
+    val openClusterPreviews: () -> Boolean = { settings.value.openClusterPreviews }
+
+    // The image-list sort order — iOS `settings.asVariable().map(\.sorting)`, kept as a Property so
+    // the list reducer keeps the synchronous get/set it expects. Shared with the map so its
+    // previews follow the same order.
     private val imageSorting: Property<ImageSorting> =
         Property(
-            getter = { sortingFlow.value },
-            setter = { newSorting ->
-                sortingFlow.value = newSorting
-                settings.value = settings.value.copy(sorting = newSorting)
-            },
+            getter = { settings.value.sorting },
+            setter = { newSorting -> settings.value = settings.value.copy(sorting = newSorting) },
+        )
+
+    // The first-run flag, its own blob under iOS's "onboarding" key (not a field of SettingsState).
+    private val onboardingStorage =
+        JsonPreference(
+            dataStore = dataStore,
+            key = "onboarding",
+            serializer = OnboardingStorage.serializer(),
+            defaultValue = OnboardingStorage(),
+            scope = scope,
         )
 
     // One location source and one reducer per graph, matching iOS's single `makeLocationModel()`:
@@ -239,15 +270,51 @@ class AppGraph(
         )
     }
 
+    private val settingsModelFactory: SettingsModelFactory = {
+        makeSettingsViewModel(
+            // The same holder every other reader derives from, so a change made here reaches the
+            // map (tint scheme, cluster previews) through `init`'s subscriptions.
+            settings = settings,
+            urlOpener = urlOpener,
+            // iOS plays a selection haptic on a scheme change, inline in its reducer; there is no
+            // haptics facade in this port yet (M16), so the call site takes a no-op for now.
+            selectionHaptic = {},
+            scope = scope,
+        )
+    }
+
+    /**
+     * The first-run wizard, or null once it has been seen — iOS `makeOnboardingViewModel` returning
+     * nil is the gate, and the app state simply seeds itself from it.
+     */
+    private val onboardingModel: OnboardingModel? =
+        makeOnboardingViewModel(
+            storage =
+                Property(
+                    getter = { onboardingStorage.value },
+                    setter = { onboardingStorage.value = it },
+                ),
+            onFinish = {
+                // 🩼 as on iOS: while the onboarding is up the map deliberately never sends
+                // `mapViewLoaded` (see RootView), so nothing has asked for location access yet —
+                // finishing has to send it by hand.
+                mapModel(MapAction.External.Ui.MapViewLoaded)
+                appModel(AppAction.Onboarding.Dismiss)
+            },
+            scope = scope,
+        )
+
     val appModel: AppModel =
         makeAppModel(
             imageDetailsFactory = imageDetailsFactory,
             searchModelFactory = searchModelFactory,
+            settingsModelFactory = settingsModelFactory,
             favoritesModel = favoritesModel,
+            onboardingModel = onboardingModel,
             currentRegionImages = { mapModel.state.value.currentRegionImages },
             sorting = imageSorting,
             requestReview = {}, // Play In-App Review lands in M16.
-            initialGradientScheme = GradientScheme.Rewind, // Settings-driven scheme lands in M13.
+            initialGradientScheme = settings.value.gradientScheme,
             scope = scope,
         )
 
@@ -257,7 +324,21 @@ class AppGraph(
         // its previews re-sort immediately instead of waiting for the next region change. `drop(1)`
         // skips the initial value — the map sorts on its own first load anyway.
         scope.launch {
-            sortingFlow.drop(1).collect { mapModel(MapAction.Internal.UpdatePreviews) }
+            settingsFlow
+                .map { it.sorting }
+                .distinctUntilChanged()
+                .drop(1)
+                .collect { mapModel(MapAction.Internal.UpdatePreviews) }
+        }
+        // Port of iOS `settings.gradientScheme.onChange { appModel(.setGradientScheme($0)) }`: the
+        // scheme is picked in Settings but lives in the app state, whence every tinted surface
+        // reads it — so pins, badges and the year selector repaint the moment it changes.
+        scope.launch {
+            settingsFlow
+                .map { it.gradientScheme }
+                .distinctUntilChanged()
+                .drop(1)
+                .collect { appModel(AppAction.SetGradientScheme(it)) }
         }
         // Port of iOS `AppGraph`: `locationModel.$state.currentAndNewValues.addObserver { ... }`.
         // The current value comes with the subscription (a StateFlow replays it), which seeds the

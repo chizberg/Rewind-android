@@ -39,4 +39,52 @@
     <string name="search_clear">Obriši</string>
     <string name="go_to_settings">Otvori podešavanja</string>
     <string name="my_location">Moja lokacija</string>
+
+    <!-- M13: settings screen -->
+    <string name="settings">Podešavanja</string>
+    <string name="settings_section_map">Mapa</string>
+    <string name="settings_open_cluster_previews">Otvori velike preglede klastera dodirom</string>
+    <string name="settings_section_gradient_picker">Izbor gradijenta</string>
+    <string name="settings_section_pastvu">PastVu</string>
+    <string name="settings_view_pastvu_website">Otvori PastVu veb-sajt</string>
+    <string name="settings_pastvu_rules">Pravila PastVu</string>
+    <string name="settings_pastvu_api_footer">Rewind koristi PastVu API za preuzimanje fotografija i slika</string>
+    <string name="settings_pastvu_thanks_footer">Ova aplikacija ne bi bila moguća bez PastVu</string>
+    <string name="settings_section_about">O aplikaciji</string>
+    <string name="settings_contact_developer">Kontaktirajte programera</string>
+    <string name="settings_view_source_code">Pogledaj izvorni kod</string>
+    <string name="settings_made_by">"Od "</string>
+    <string name="settings_with_help_from">uz malu pomoć od:</string>
+
+    <!-- M13: base map style (the floating menu’s scheme/satellite toggle) -->
+    <string name="map_type_scheme">Mapa</string>
+    <string name="map_type_satellite">Satelit</string>
+
+    <!-- M13: first-run onboarding -->
+    <string name="onboarding_hi">Zdravo!</string>
+    <string name="onboarding_this_is">"Ovo je "</string>
+    <string name="onboarding_time_travel_app">Aplikacija za putovanje kroz vreme</string>
+    <string name="onboarding_get_started">Započnimo!</string>
+    <string name="onboarding_lets_see">Hajde!</string>
+    <string name="onboarding_history_near_you_title">Istorija u vašoj blizini</string>
+    <string name="onboarding_history_near_you_description">Pregledajte stare fotografije i\u00A0slike mesta na\u00A0mapi</string>
+    <string name="onboarding_images_saving_title">Sačuvajte omiljene</string>
+    <string name="onboarding_images_saving_description">Možete napraviti kolekciju svojih nezaboravnih trenutaka i\u00A0mesta</string>
+    <string name="onboarding_comparison_title">Uporedite prošlost i sadašnjost</string>
+    <string name="onboarding_comparison_description">Koristite kameru da uporedite isto mesto tokom vremena</string>
+    <string name="onboarding_street_view_title">Street View</string>
+    <string name="onboarding_street_view_description">Pogledajte kako mesto izgleda danas koristeći Google Street View</string>
+    <string name="onboarding_translate_title">Prevod</string>
+    <string name="onboarding_translate_description">Opisi na stranom jeziku mogu se prevesti na vaš jednim dodirom</string>
+    <string name="onboarding_history_on_a_map">Istorija na mapi</string>
+    <string name="onboarding_what_do_images_look_like">Kako izgledaju slike?</string>
+    <string name="onboarding_single_image_title">Pojedinačna slika</string>
+    <string name="onboarding_single_image_description">Pokazuje smer. Dodirnite da biste videli detalje slike</string>
+    <string name="onboarding_group_of_images_title">Grupa slika</string>
+    <string name="onboarding_group_of_images_description">Nekoliko slika koje se nalaze blizu jedna druge. Otvara punu listu kada se dodirne</string>
+    <string name="onboarding_cluster_of_images_title">Klaster slika</string>
+    <string name="onboarding_cluster_of_images_description">Velika grupa slika. Da biste ih sve videli, potrebno je da zumirate</string>
+    <string name="onboarding_date">Svaka slika ima lokaciju i datum. Datumu odgovara boja</string>
+    <string name="onboarding_pastvu">Rewind koristi PastVu API za dobijanje svih istorijskih fotografija, slika i njihovih pratećih podataka.</string>
+    <string name="onboarding_location">Rewind treba vašu lokaciju da bi prikazivao fotografije i slike u vašoj blizini. Bez toga i dalje možete koristiti aplikaciju</string>
 </resources>

@@ -39,4 +39,52 @@
     <string name="search_clear">Тазалау</string>
     <string name="go_to_settings">Баптауларды ашу</string>
     <string name="my_location">Менің орналасқан жерім</string>
+
+    <!-- M13: settings screen -->
+    <string name="settings">Параметрлер</string>
+    <string name="settings_section_map">Карта</string>
+    <string name="settings_open_cluster_previews">Үлкен кластер алдын ала көрінісін түрту арқылы ашу</string>
+    <string name="settings_section_gradient_picker">Градиент таңдағыш</string>
+    <string name="settings_section_pastvu">PastVu</string>
+    <string name="settings_view_pastvu_website">PastVu сайтын ашу</string>
+    <string name="settings_pastvu_rules">PastVu ережелері</string>
+    <string name="settings_pastvu_api_footer">Rewind фотосуреттер мен картиналарды алу үшін PastVu API пайдаланады</string>
+    <string name="settings_pastvu_thanks_footer">Бұл қолданба PastVu-сіз мүмкін болмас еді</string>
+    <string name="settings_section_about">Қолданба туралы</string>
+    <string name="settings_contact_developer">Әзірлеушіге хабарласу</string>
+    <string name="settings_view_source_code">Бастапқы кодты көру</string>
+    <string name="settings_made_by">"Жасаған: "</string>
+    <string name="settings_with_help_from">көмектескендер:</string>
+
+    <!-- M13: base map style (the floating menu’s scheme/satellite toggle) -->
+    <string name="map_type_scheme">Сызба</string>
+    <string name="map_type_satellite">Жерсерік</string>
+
+    <!-- M13: first-run onboarding -->
+    <string name="onboarding_hi">Сәлем!</string>
+    <string name="onboarding_this_is">"Бұл "</string>
+    <string name="onboarding_time_travel_app">Уақытта саяхаттау қолданбасы</string>
+    <string name="onboarding_get_started">Бастау</string>
+    <string name="onboarding_lets_see">Көрейік!</string>
+    <string name="onboarding_history_near_you_title">Сіздің маңайыңыздағы тарих</string>
+    <string name="onboarding_history_near_you_description">Картадағы орындардың ескі\u00A0фотосуреттері мен\u00A0картиналарын қараңыз</string>
+    <string name="onboarding_images_saving_title">Таңдаулыларыңызды сақтаңыз</string>
+    <string name="onboarding_images_saving_description">Ең керемет сәттеріңіз бен\u00A0орындарыңыздың коллекциясын жасай\u00A0аласыз</string>
+    <string name="onboarding_comparison_title">Өткен мен бүгінді салыстырыңыз</string>
+    <string name="onboarding_comparison_description">Бір орынды уақыт өткен сайын салыстыру үшін камераңызды пайдаланыңыз</string>
+    <string name="onboarding_street_view_title">Street View</string>
+    <string name="onboarding_street_view_description">Google Street View көмегімен жердің бүгінгі көрінісін қараңыз</string>
+    <string name="onboarding_translate_title">Аудару</string>
+    <string name="onboarding_translate_description">Шет тіліндегі сипаттамаларды бір түрту арқылы өз тіліңізге аударуға болады</string>
+    <string name="onboarding_history_on_a_map">Картадағы тарих</string>
+    <string name="onboarding_what_do_images_look_like">Суреттер қалай көрінеді?</string>
+    <string name="onboarding_single_image_title">Жалғыз сурет</string>
+    <string name="onboarding_single_image_description">Бағытты көрсетеді. Сурет мәліметтерін көру үшін оны түртіңіз</string>
+    <string name="onboarding_group_of_images_title">Суреттер тобы</string>
+    <string name="onboarding_group_of_images_description">Бір-біріне жақын орналасқан бірнеше сурет. Түрткенде толық тізім ашылады</string>
+    <string name="onboarding_cluster_of_images_title">Суреттер тобы</string>
+    <string name="onboarding_cluster_of_images_description">Суреттердің үлкен тобы. Олардың барлығын көру үшін жақындату қажет</string>
+    <string name="onboarding_date">Әр суреттің орны мен күні бар. Күнге сәйкес түс тағайындалған</string>
+    <string name="onboarding_pastvu">Rewind барлық тарихи фотосуреттерді, картиналарды және олармен байланысты деректерді алу үшін PastVu API пайдаланады.</string>
+    <string name="onboarding_location">Rewind сізге жақын жердегі фотосуреттер мен картиналарды көрсету үшін орналасқан жеріңізді қажет етеді. Онсыз да қолданбаны пайдалана аласыз</string>
 </resources>

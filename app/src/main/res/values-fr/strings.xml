@@ -39,4 +39,52 @@
     <string name="search_clear">Effacer</string>
     <string name="go_to_settings">Ouvrir les réglages</string>
     <string name="my_location">Ma position</string>
+
+    <!-- M13: settings screen -->
+    <string name="settings">Réglages</string>
+    <string name="settings_section_map">Carte</string>
+    <string name="settings_open_cluster_previews">Ouvrir les grands aperçus de cluster au toucher</string>
+    <string name="settings_section_gradient_picker">Sélecteur de dégradé</string>
+    <string name="settings_section_pastvu">PastVu</string>
+    <string name="settings_view_pastvu_website">Ouvrir le site web PastVu</string>
+    <string name="settings_pastvu_rules">Règles de PastVu</string>
+    <string name="settings_pastvu_api_footer">Rewind utilise l\'API PastVu pour obtenir des photos et des peintures</string>
+    <string name="settings_pastvu_thanks_footer">Cette application n\'aurait pas été possible sans PastVu</string>
+    <string name="settings_section_about">À propos</string>
+    <string name="settings_contact_developer">Contacter le développeur</string>
+    <string name="settings_view_source_code">Voir le code source</string>
+    <string name="settings_made_by">"Créé par "</string>
+    <string name="settings_with_help_from">avec un peu d\'aide de :</string>
+
+    <!-- M13: base map style (the floating menu’s scheme/satellite toggle) -->
+    <string name="map_type_scheme">Plan</string>
+    <string name="map_type_satellite">Satellite</string>
+
+    <!-- M13: first-run onboarding -->
+    <string name="onboarding_hi">Salut !</string>
+    <string name="onboarding_this_is">"C\'est "</string>
+    <string name="onboarding_time_travel_app">Une app de voyage dans le temps</string>
+    <string name="onboarding_get_started">Commencer</string>
+    <string name="onboarding_lets_see">Allons-y !</string>
+    <string name="onboarding_history_near_you_title">L\'histoire près de chez vous</string>
+    <string name="onboarding_history_near_you_description">Parcourez d\'anciennes photos et\u00A0peintures de\u00A0lieux sur\u00A0la\u00A0carte</string>
+    <string name="onboarding_images_saving_title">Enregistrez vos favoris</string>
+    <string name="onboarding_images_saving_description">Créez une\u00A0collection de\u00A0vos moments et\u00A0lieux les\u00A0plus spectaculaires</string>
+    <string name="onboarding_comparison_title">Comparez le passé et le présent</string>
+    <string name="onboarding_comparison_description">Utilisez votre caméra pour comparer le même endroit au fil du temps</string>
+    <string name="onboarding_street_view_title">Street View</string>
+    <string name="onboarding_street_view_description">Découvrez à quoi ressemble le lieu aujourd\'hui grâce à Google Street View</string>
+    <string name="onboarding_translate_title">Traduire</string>
+    <string name="onboarding_translate_description">Les descriptions dans une langue étrangère peuvent être traduites dans la vôtre en un seul geste</string>
+    <string name="onboarding_history_on_a_map">Histoire sur une carte</string>
+    <string name="onboarding_what_do_images_look_like">Comment les images apparaissent-elles ?</string>
+    <string name="onboarding_single_image_title">Image unique</string>
+    <string name="onboarding_single_image_description">Indique la direction. Vous pouvez voir les détails de l\'image en appuyant dessus</string>
+    <string name="onboarding_group_of_images_title">Groupe d\'images</string>
+    <string name="onboarding_group_of_images_description">Plusieurs images proches les unes des autres. Ouvre une liste complète lorsqu\'on appuie dessus</string>
+    <string name="onboarding_cluster_of_images_title">Groupe d\'images</string>
+    <string name="onboarding_cluster_of_images_description">Un grand groupe d\'images. Pour toutes les voir, vous devez zoomer</string>
+    <string name="onboarding_date">Chaque image a une localisation et une date. La date a une couleur correspondante</string>
+    <string name="onboarding_pastvu">Rewind utilise l\'API PastVu pour obtenir toutes les photos historiques, peintures et leurs données associées.</string>
+    <string name="onboarding_location">Rewind a besoin de votre position pour afficher les photos et peintures près de vous. Sans cela, vous pouvez quand même utiliser l\'app</string>
 </resources>

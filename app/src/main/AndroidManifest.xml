@@ -23,6 +23,15 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="https" />
         </intent>
+        <!--
+            Same lesson, second scheme: Settings' "Contact developer" opens a mailto: URL, and
+            without this entry every mail app stays invisible to the resolver, so the tap does
+            nothing at all.
+        -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="mailto" />
+        </intent>
     </queries>
 
     <application

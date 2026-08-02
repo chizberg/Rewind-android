@@ -80,6 +80,10 @@ internal class OverlayEntry {
     var onBack: () -> Unit = {}
     var content: @Composable () -> Unit = {}
 
+    /** False for a layer with no way out but its own content (the onboarding): the host then leaves
+     *  the gesture to the activity, which minimises the app instead of dismissing anything. */
+    var acceptsBack by mutableStateOf(true)
+
     val presence = Animatable(0f) // 0 = gone, 1 = fully up
     val back = Animatable(0f) // 0..1 interactive back-gesture progress (only meaningful while top)
     var edge by mutableIntStateOf(BackEventCompat.EDGE_LEFT)
@@ -166,9 +170,11 @@ fun OverlayHost(
 
             // One predictive-back handler, always for the current top layer. It registers after the
             // activity's root callback, so LIFO hands it the gesture; with no layer up, the root
-            // callback (minimise to launcher) runs instead.
+            // callback (minimise to launcher) runs instead — and so it does for a top layer that
+            // does not accept back at all: the gesture is neither consumed here nor passed down to
+            // a layer buried underneath, it just leaves the app with the stack intact.
             val top = stack.topPresent()
-            if (top != null) {
+            if (top != null && top.acceptsBack) {
                 key(top) {
                     PredictiveBackHandler { events ->
                         try {
@@ -195,13 +201,16 @@ fun OverlayHost(
  * the host's job — a caller only says "here is my overlay and how to dismiss it".
  *
  * @param target non-null means this layer is up; clear it from [onBack].
+ * @param onBack how the back gesture dismisses this layer, or `null` if it cannot be backed out of
+ *   at all (the onboarding). A null handler is not the same as an empty one: the layer stops being a
+ *   back target entirely, so the gesture never grabs it and leaves it sitting half-dragged.
  * @param opaque whether this layer paints a full-screen surface (so it needs a black backing when it
  *   recedes). The map passes `false`; every real screen leaves the default `true`.
  */
 @Composable
 fun <T : Any> Overlay(
     target: T?,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
     opaque: Boolean = true,
     content: @Composable (T) -> Unit,
 ) {
@@ -217,13 +226,14 @@ fun <T : Any> Overlay(
     val currentOnBack by rememberUpdatedState(onBack)
     remember(entry) {
         entry.content = { shown?.let { currentContent(it) } }
-        entry.onBack = { currentOnBack() }
+        entry.onBack = { currentOnBack?.invoke() }
         true
     }
     // Equal writes to these are de-duplicated by snapshot state, so this does not churn the host.
     SideEffect {
         entry.present = target != null
         entry.opaque = opaque
+        entry.acceptsBack = onBack != null
     }
 
     DisposableEffect(stack) {

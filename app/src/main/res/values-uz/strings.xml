@@ -39,4 +39,52 @@
     <string name="search_clear">Tozalash</string>
     <string name="go_to_settings">Sozlamalarni ochish</string>
     <string name="my_location">Mening joylashuvim</string>
+
+    <!-- M13: settings screen -->
+    <string name="settings">Sozlamalar</string>
+    <string name="settings_section_map">Xarita</string>
+    <string name="settings_open_cluster_previews">Katta klaster oldindan ko\'rishlarini bosish orqali ochish</string>
+    <string name="settings_section_gradient_picker">Gradient tanlash</string>
+    <string name="settings_section_pastvu">PastVu</string>
+    <string name="settings_view_pastvu_website">PastVu veb-saytini ochish</string>
+    <string name="settings_pastvu_rules">PastVu qoidalari</string>
+    <string name="settings_pastvu_api_footer">Rewind fotosuratlar va rasmlarni olish uchun PastVu API dan foydalanadi</string>
+    <string name="settings_pastvu_thanks_footer">Bu ilova PastVu-siz mumkin bo\'lmas edi</string>
+    <string name="settings_section_about">Dastur haqida</string>
+    <string name="settings_contact_developer">Dasturchi bilan bog\'lanish</string>
+    <string name="settings_view_source_code">Manba kodini ko\'rish</string>
+    <string name="settings_made_by">"Yaratgan: "</string>
+    <string name="settings_with_help_from">Yordam ko\'rsatganlar:</string>
+
+    <!-- M13: base map style (the floating menu’s scheme/satellite toggle) -->
+    <string name="map_type_scheme">Sxema</string>
+    <string name="map_type_satellite">Sputnik</string>
+
+    <!-- M13: first-run onboarding -->
+    <string name="onboarding_hi">Salom!</string>
+    <string name="onboarding_this_is">"Bu "</string>
+    <string name="onboarding_time_travel_app">Vaqtda sayohat qilish ilovasi</string>
+    <string name="onboarding_get_started">Boshlash</string>
+    <string name="onboarding_lets_see">Qani ko\'raylik!</string>
+    <string name="onboarding_history_near_you_title">Yaqin atrofingizdagi tarix</string>
+    <string name="onboarding_history_near_you_description">Xaritadagi joylarning eski fotosuratlari va rasmlarini ko\'ring</string>
+    <string name="onboarding_images_saving_title">Sevimlilarni saqlang</string>
+    <string name="onboarding_images_saving_description">Eng ajoyib lahzalaringiz va\u00A0joylaringizning kolleksiyasini yaratishingiz mumkin</string>
+    <string name="onboarding_comparison_title">O\'tmish va hozirni solishtiring</string>
+    <string name="onboarding_comparison_description">Bir joyni vaqt o\'tishi bilan solishtirish uchun kamerangizdan foydalaning</string>
+    <string name="onboarding_street_view_title">Street View</string>
+    <string name="onboarding_street_view_description">Google Street View yordamida joyning bugungi ko\'rinishini ko\'ring</string>
+    <string name="onboarding_translate_title">Tarjima</string>
+    <string name="onboarding_translate_description">Chet tildagi tavsiflarni bitta bosish bilan o\'z tilingizga tarjima qilish mumkin</string>
+    <string name="onboarding_history_on_a_map">Xaritadagi tarix</string>
+    <string name="onboarding_what_do_images_look_like">Rasmlar qanday ko\'rinadi?</string>
+    <string name="onboarding_single_image_title">Bitta rasm</string>
+    <string name="onboarding_single_image_description">Yo\'nalishni ko\'rsatadi. Rasm tafsilotlarini ko\'rish uchun unga bosing</string>
+    <string name="onboarding_group_of_images_title">Rasmlar guruhi</string>
+    <string name="onboarding_group_of_images_description">Bir-biriga yaqin joylashgan bir nechta rasm. Bosilganda to\'liq ro\'yxat ochiladi</string>
+    <string name="onboarding_cluster_of_images_title">Rasmlar klasteri</string>
+    <string name="onboarding_cluster_of_images_description">Rasmlarning katta guruhi. Ularning barchasini ko\'rish uchun yaqinlashtirish kerak</string>
+    <string name="onboarding_date">Har bir rasmning joylashuvi va sanasi bor. Sanaga mos rang tayinlangan</string>
+    <string name="onboarding_pastvu">Rewind barcha tarixiy fotosuratlar, rasmlar va ular bilan bogʻliq maʼlumotlarni olish uchun PastVu API dan foydalanadi.</string>
+    <string name="onboarding_location">Rewind sizga yaqin joylardagi fotosuratlar va rasmlarni koʻrsatish uchun joylashuvingizni bilishi kerak. Busiz ham ilovadan foydalanishingiz mumkin</string>
 </resources>

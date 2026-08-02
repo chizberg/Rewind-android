@@ -39,4 +39,52 @@
     <string name="search_clear">Очистити</string>
     <string name="go_to_settings">Відкрити налаштування</string>
     <string name="my_location">Моє місцезнаходження</string>
+
+    <!-- M13: settings screen -->
+    <string name="settings">Налаштування</string>
+    <string name="settings_section_map">Карта</string>
+    <string name="settings_open_cluster_previews">Відкривати превʼю великих кластерів дотиком</string>
+    <string name="settings_section_gradient_picker">Вибір градієнта</string>
+    <string name="settings_section_pastvu">PastVu</string>
+    <string name="settings_view_pastvu_website">Відкрити сайт PastVu</string>
+    <string name="settings_pastvu_rules">Правила PastVu</string>
+    <string name="settings_pastvu_api_footer">Rewind використовує PastVu API для отримання фотографій та картин</string>
+    <string name="settings_pastvu_thanks_footer">Цей додаток був би неможливий без PastVu</string>
+    <string name="settings_section_about">Про застосунок</string>
+    <string name="settings_contact_developer">Зв\'язатися з розробником</string>
+    <string name="settings_view_source_code">Переглянути вихідний код</string>
+    <string name="settings_made_by">"Зроблено "</string>
+    <string name="settings_with_help_from">з невеликою допомогою від:</string>
+
+    <!-- M13: base map style (the floating menu’s scheme/satellite toggle) -->
+    <string name="map_type_scheme">Схема</string>
+    <string name="map_type_satellite">Супутник</string>
+
+    <!-- M13: first-run onboarding -->
+    <string name="onboarding_hi">Привіт!</string>
+    <string name="onboarding_this_is">"Це "</string>
+    <string name="onboarding_time_travel_app">Застосунок для подорожей у часі</string>
+    <string name="onboarding_get_started">Почнімо!</string>
+    <string name="onboarding_lets_see">Погнали!</string>
+    <string name="onboarding_history_near_you_title">Історія поруч із вами</string>
+    <string name="onboarding_history_near_you_description">Переглядайте старі фотографії та\u00A0картини місць на\u00A0карті</string>
+    <string name="onboarding_images_saving_title">Зберігайте улюблене</string>
+    <string name="onboarding_images_saving_description">Створіть колекцію найяскравіших моментів і\u00A0місць</string>
+    <string name="onboarding_comparison_title">Порівняйте минуле з сьогоденням</string>
+    <string name="onboarding_comparison_description">Використовуйте камеру, щоб порівняти те саме місце з плином часу</string>
+    <string name="onboarding_street_view_title">Street View</string>
+    <string name="onboarding_street_view_description">Подивіться, як місце виглядає сьогодні, за допомогою Google Street View</string>
+    <string name="onboarding_translate_title">Переклад</string>
+    <string name="onboarding_translate_description">Описи іноземною мовою можна перекласти на вашу одним дотиком</string>
+    <string name="onboarding_history_on_a_map">Історія на карті</string>
+    <string name="onboarding_what_do_images_look_like">Як виглядають зображення?</string>
+    <string name="onboarding_single_image_title">Одне зображення</string>
+    <string name="onboarding_single_image_description">Показує напрямок. Щоб переглянути деталі зображення, торкніться його</string>
+    <string name="onboarding_group_of_images_title">Група зображень</string>
+    <string name="onboarding_group_of_images_description">Декілька зображень, які знаходяться поруч. Відкриває повний список при дотику</string>
+    <string name="onboarding_cluster_of_images_title">Кластер зображень</string>
+    <string name="onboarding_cluster_of_images_description">Велика група зображень. Щоб переглянути їх усі, потрібно наблизити</string>
+    <string name="onboarding_date">Кожне зображення має локацію та дату. Даті відповідає колір</string>
+    <string name="onboarding_pastvu">Rewind використовує PastVu API для отримання всіх історичних фотографій, картин та пов\'язаних з ними даних.</string>
+    <string name="onboarding_location">Rewind потребує вашу локацію, щоб показувати фотографії та картини поблизу. Без цього доступу застосунок теж можна використовувати</string>
 </resources>

@@ -30,9 +30,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Brush
+import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.rounded.Brush
 import androidx.compose.material.icons.rounded.LocationDisabled
 import androidx.compose.material.icons.rounded.MyLocation
+import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Badge
@@ -42,6 +44,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -74,20 +77,23 @@ import com.chizberg.rewind.core.util.lerp
 import com.chizberg.rewind.core.util.lerpParameter
 import com.chizberg.rewind.domain.GradientScheme
 import com.chizberg.rewind.domain.ImageRequestFilters
+import com.chizberg.rewind.domain.MapType
 import com.chizberg.rewind.features.map.MapControlItem
 import com.chizberg.rewind.ui.toComposeColor
+import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
+import kotlin.time.Duration.Companion.seconds
 import androidx.compose.ui.graphics.Brush as GradientBrush
 
 /**
- * The map's floating menu: the filter controls (year-picker toggle, photo/painting switch), the
- * place-search and location buttons, plus the year selector that expands underneath. Filter changes
- * are dispatched up as [com.chizberg.rewind.features.map.MapAction.External.Ui.FiltersChanged] /
- * [com.chizberg.rewind.features.map.MapAction.External.Ui.Controls.SetExpandedItems], and so is the
- * location tap (iOS `.locationTap` → `.right(.locationButtonTapped)`); the search button goes to the
- * *app* reducer instead (iOS `.searchTap` → `.left(.search(.present))`), so it arrives as a plain
- * [onSearchClick] callback. Port of iOS `FloatingMenu` minus its map-type item, which arrives with
- * its milestone.
+ * The map's floating menu: the filter controls (year-picker toggle, scheme/satellite switch,
+ * photo/painting switch), the place-search and location buttons, plus the year selector that
+ * expands underneath. Filter changes are dispatched up as
+ * [com.chizberg.rewind.features.map.MapAction.External.Ui.FiltersChanged] /
+ * [com.chizberg.rewind.features.map.MapAction.External.Ui.Controls.SetExpandedItems], and so are
+ * the map-type and location taps (iOS `.locationTap` → `.right(.locationButtonTapped)`); the search
+ * button goes to the *app* reducer instead (iOS `.searchTap` → `.left(.search(.present))`), so it
+ * arrives as a plain [onSearchClick] callback. Port of iOS `FloatingMenu`, same item order.
  *
  * **The fixed items ride in their own bubble, pushed to the far edge**, mirroring iOS: there every
  * item wears its own capsule (`BackgroundModifier`) and a `Spacer()` splits the filter items from
@@ -105,9 +111,11 @@ import androidx.compose.ui.graphics.Brush as GradientBrush
 fun FloatingMenu(
     filters: ImageRequestFilters,
     scheme: GradientScheme,
+    mapType: MapType,
     expandedItems: Set<MapControlItem>,
     locationAccessGranted: Boolean,
     onFiltersChanged: (ImageRequestFilters) -> Unit,
+    onMapTypeChanged: (MapType) -> Unit,
     onExpandedItemsChanged: (Set<MapControlItem>) -> Unit,
     onSearchClick: () -> Unit,
     onLocationClick: () -> Unit,
@@ -118,6 +126,10 @@ fun FloatingMenu(
     val kindLabel =
         stringResource(
             if (isPainting) R.string.image_kind_paintings else R.string.image_kind_photos,
+        )
+    val mapTypeLabel =
+        stringResource(
+            if (mapType.isHybrid) R.string.map_type_satellite else R.string.map_type_scheme,
         )
     Column(modifier.fillMaxWidth()) {
         // Capped to the same width as the selector below, so the trailing bubble lands on the
@@ -159,6 +171,17 @@ fun FloatingMenu(
                                 .takeIf { filters.isRangeModified },
                         isActive = filters.isRangeModified,
                     )
+                    // Second in the row, as on iOS, and titled like it: the mode is named for a
+                    // second right after it changes, in both directions.
+                    MenuToggle(
+                        checked = mapType.isHybrid,
+                        onCheckedChange = { hybrid ->
+                            onMapTypeChanged(if (hybrid) MapType.Hybrid else MapType.Scheme)
+                        },
+                        icon = if (mapType.isHybrid) Icons.Rounded.Public else Icons.Outlined.Map,
+                        description = mapTypeLabel,
+                        title = mapTypeLabel,
+                    )
                     MenuToggle(
                         checked = isPainting,
                         onCheckedChange = { checked ->
@@ -170,11 +193,11 @@ fun FloatingMenu(
                                 }
                             onFiltersChanged(filters.copy(imageKind = kind))
                         },
-                        // FILL-axis swap (iOS `paintbrush.pointed` / `.fill`) plus the mode spelled
-                        // out: the tonal container alone reads as decoration and is easy to miss.
+                        // FILL-axis swap (iOS `paintbrush.pointed` / `.fill`) is the lasting cue;
+                        // the spelled-out mode only passes through on a change.
                         icon = if (isPainting) Icons.Rounded.Brush else Icons.Outlined.Brush,
                         description = kindLabel,
-                        label = kindLabel.takeIf { isPainting },
+                        title = kindLabel,
                     )
                 }
             }
@@ -285,14 +308,14 @@ private fun ControlsPanel(
 /**
  * One control in the toolbar row. Port of the iOS `FloatingMenuButton` /
  * `TitledFloatingMenuButton` pair: a glyph that fills with `secondaryContainer` while [checked],
- * optionally carrying a [label] to its right (iOS shows its title only for a second after a change,
- * via `ValueChangeIndicator`; here it stays, because on Android the tonal fill alone reads as
- * decoration and the state was easy to miss). [isActive] is iOS's accent tint for a control that is
- * doing something while unchecked — the one brand accent in the chrome.
+ * naming its new state to the right for a second whenever [title] changes and then withdrawing
+ * (iOS `ValueChangeIndicator(value: title, duration: 1)`). [isActive] is iOS's accent tint for a
+ * control that is doing something while unchecked — the one brand accent in the chrome.
  *
  * Sized to a 48dp pill so it nests concentrically inside the panel's 28dp corner (48/2 + 4dp panel
- * padding = 28), and it stays a pill once a label widens it. Semantics are set here rather than on
- * the glyph so a labelled control isn't announced twice.
+ * padding = 28), and it stays a pill once a title widens it. Semantics are set here rather than on
+ * the glyph so a labelled control isn't announced twice — and [stateLabel] / [title] feed the state
+ * description whether or not the title happens to be on screen at the time.
  */
 @Composable
 private fun MenuToggle(
@@ -301,7 +324,7 @@ private fun MenuToggle(
     icon: ImageVector,
     description: String,
     modifier: Modifier = Modifier,
-    label: String? = null,
+    title: String? = null,
     stateLabel: String? = null,
     badged: Boolean = false,
     isActive: Boolean = false,
@@ -322,10 +345,26 @@ private fun MenuToggle(
             },
             label = "menuToggleContent",
         )
-    // Held over so the label has something to draw while it animates back out.
-    var lastLabel by remember { mutableStateOf(label) }
-    if (label != null) lastLabel = label
-    val state = stateLabel ?: label
+    // iOS `ValueChangeIndicator`: the title is shown only in response to a change — never on the
+    // first composition, where SwiftUI's `onChange` would not have fired either — and a change
+    // arriving while it is up restarts the second (the relaunched effect cancels the pending delay,
+    // as iOS cancels its pending task). The lasting cue for a non-default state is the glyph and
+    // its fill, exactly as on iOS.
+    var titleShown by remember { mutableStateOf(false) }
+    var isFirstTitle by remember { mutableStateOf(true) }
+    LaunchedEffect(title) {
+        if (isFirstTitle) {
+            isFirstTitle = false
+            return@LaunchedEffect
+        }
+        titleShown = true
+        delay(TitleDuration)
+        titleShown = false
+    }
+    // Held over so the title has something to draw while it animates back out.
+    var lastTitle by remember { mutableStateOf(title) }
+    if (title != null) lastTitle = title
+    val state = stateLabel ?: title
     Surface(
         checked = checked,
         onCheckedChange = onCheckedChange,
@@ -352,16 +391,16 @@ private fun MenuToggle(
                 Icon(icon, contentDescription = null)
             }
             AnimatedVisibility(
-                visible = label != null,
-                // Anchored at the start so the label unrolls out of the glyph, first letter first —
+                visible = titleShown && title != null,
+                // Anchored at the start so the title unrolls out of the glyph, first letter first —
                 // the default end-anchor reveals its tail first, which reads as garbled text.
                 enter = fadeIn() + expandHorizontally(expandFrom = Alignment.Start),
                 exit = fadeOut() + shrinkHorizontally(shrinkTowards = Alignment.Start),
             ) {
                 Text(
-                    // The gap rides with the label so a collapsed one leaves no phantom space.
+                    // The gap rides with the title so a collapsed one leaves no phantom space.
                     modifier = Modifier.padding(start = ToggleLabelGap),
-                    text = lastLabel.orEmpty(),
+                    text = lastTitle.orEmpty(),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
@@ -373,8 +412,8 @@ private fun MenuToggle(
 
 /**
  * A menu control that just acts. Port of the iOS `FloatingMenuButton` (its `.fixed` items — search
- * and location here, map type later): [MenuToggle]'s geometry and resting colours without a checked
- * state, so a control reads the same whichever bubble it sits in.
+ * and location): [MenuToggle]'s geometry and resting colours without a checked state, so a control
+ * reads the same whichever bubble it sits in.
  */
 @Composable
 private fun MenuButton(
@@ -412,9 +451,13 @@ private fun MenuButton(
  * `updateMaxRange`) — by then the reducer has already reset the range to the new kind's full span.
  * A year is handed up only when it actually changes (iOS `rangeDidChange`; the reducer debounces
  * the reload), and positions are read in the layout/draw phase so a drag never recomposes.
+ *
+ * Public because the onboarding's second page embeds the very same control to explain
+ * colour-by-year — iOS reaches for the map's `YearSelector` there too (`AnnotationsScreen.swift`),
+ * on a purely local range that never touches the map's filters.
  */
 @Composable
-private fun YearSelector(
+fun YearSelector(
     yearRange: IntRange,
     maxRange: IntRange,
     scheme: GradientScheme,
@@ -680,6 +723,9 @@ private val ControlSpacing = 4.dp
 private val ToggleHeight = 48.dp
 private val TogglePaddingH = 12.dp
 private val ToggleLabelGap = 6.dp
+
+/** How long a changed state names itself before withdrawing — iOS `ValueChangeIndicator(duration: 1)`. */
+private val TitleDuration = 1.seconds
 
 // Thumb geometry echoes iOS `ThumbView` (60x30, corner 15) at a Compose scale; the year label sits
 // centred. The track thickness echoes iOS `lineHeight` (7), the selector height iOS's `frame(50)`.

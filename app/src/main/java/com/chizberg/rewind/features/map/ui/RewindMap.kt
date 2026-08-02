@@ -99,6 +99,10 @@ private val FiltersGap = 8.dp
  * [com.chizberg.rewind.app.AppGraph] and injected here; tapping an annotation or a preview card is
  * routed up via [onAnnotationClick] / [onCardClick]. [focusRequests] recenters the camera (the
  * Android stand-in for iOS `focusOn`).
+ *
+ * [onMapLoaded] is passed in rather than dispatched here because iOS gates it: its equivalent lives
+ * in `RootView` and is skipped entirely while the onboarding is up, so nothing asks for location
+ * access over the welcome screen (see `RootView`).
  */
 @Composable
 fun RewindMap(
@@ -106,12 +110,15 @@ fun RewindMap(
     imageLoader: ImageLoader,
     scheme: GradientScheme,
     focusRequests: Flow<CameraFocus>,
+    openClusterPreviews: () -> Boolean,
     onCardClick: (PreviewCard) -> Unit,
     onAnnotationClick: (AnnotationValue) -> Unit,
     onLocalClusterClick: (ModelLocalCluster) -> Unit,
     onFavoritesClick: () -> Unit,
     onViewAsListClick: () -> Unit,
     onSearchClick: () -> Unit,
+    onSettingsClick: () -> Unit,
+    onMapLoaded: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val cameraPositionState =
@@ -182,22 +189,29 @@ fun RewindMap(
     }
 
     val cameraScope = rememberCoroutineScope()
-    // What a tap on an annotation does. An image opens its details (routed up to [onAnnotationClick]);
-    // a local cluster opens its images as the "Cluster" grid list (routed up to [onLocalClusterClick],
-    // the iOS default for a local cluster); a server cluster zooms the camera in toward it — the iOS
-    // default when the "open cluster previews" setting is off (that opt-in setting lands in M13).
+    // What a tap on an annotation does. An image opens its details (routed up to
+    // [onAnnotationClick]); a local cluster opens its images as the "Cluster" grid list (routed up
+    // to [onLocalClusterClick], the iOS default for a local cluster); a server cluster either opens
+    // its representative image or zooms the camera in toward it, exactly as iOS's
+    // `annotationSelected` branches on `settings.value.openClusterPreviews`. The setting is read at
+    // tap time, not observed — iOS reads it synchronously off the settings variable in the same
+    // place.
     val onAnnotationTapped: (AnnotationValue) -> Unit = { annotation ->
         when (annotation) {
             is AnnotationValue.Image -> onAnnotationClick(annotation)
             is AnnotationValue.LocalCluster -> onLocalClusterClick(annotation.value)
             is AnnotationValue.Cluster ->
-                cameraScope.launch {
-                    cameraPositionState.animate(
-                        CameraUpdateFactory.newLatLngZoom(
-                            annotation.coordinate().toLatLng(),
-                            cameraPositionState.position.zoom + CLUSTER_ZOOM_STEP,
-                        ),
-                    )
+                if (openClusterPreviews()) {
+                    onAnnotationClick(annotation)
+                } else {
+                    cameraScope.launch {
+                        cameraPositionState.animate(
+                            CameraUpdateFactory.newLatLngZoom(
+                                annotation.coordinate().toLatLng(),
+                                cameraPositionState.position.zoom + CLUSTER_ZOOM_STEP,
+                            ),
+                        )
+                    }
                 }
         }
     }
@@ -219,9 +233,13 @@ fun RewindMap(
             // inset is handed to the overlay so its marker placement matches the map's target.
             contentPadding = PaddingValues(bottom = stripHeight),
             // The blue dot (iOS `showsUserLocation = true`). Strictly tied to the granted flag:
-            // switching it on without the permission throws SecurityException.
+            // switching it on without the permission throws SecurityException. The base style comes
+            // straight off the state (iOS pokes the live map view with `applyMapType` instead).
             properties =
-                MapProperties(isMyLocationEnabled = state.locationState.isAccessGranted),
+                MapProperties(
+                    isMyLocationEnabled = state.locationState.isAccessGranted,
+                    mapType = state.mapType.toSdkMapType(),
+                ),
             // Mirror iOS RewindMapView: rotation and pitch (tilt) disabled; no Android-only zoom
             // buttons or map toolbar (iOS MapKit has no such controls). The SDK's own my-location
             // button is off as well — ours lives in the floating menu, like iOS's.
@@ -234,8 +252,8 @@ fun RewindMap(
                     mapToolbarEnabled = false,
                 ),
             // iOS `mapViewDidFinishLoadingMap` -> `.ui(.mapViewLoaded)`: the cue to ask for
-            // location access and start tracking.
-            onMapLoaded = { mapModel(MapAction.External.Ui.MapViewLoaded) },
+            // location access and start tracking. Gated by the caller (see the KDoc).
+            onMapLoaded = onMapLoaded,
         ) {
             // Invisible SDK markers, one per annotation, are the tap targets: the SDK hit-tests them
             // natively (exact bounds + z-order, no guessing) and never blocks a map drag, so a swipe
@@ -270,8 +288,10 @@ fun RewindMap(
             FloatingMenu(
                 filters = state.filters,
                 scheme = scheme,
+                mapType = state.mapType,
                 expandedItems = state.controls.expandedItems,
                 onFiltersChanged = { mapModel(MapAction.External.Ui.FiltersChanged(it)) },
+                onMapTypeChanged = { mapModel(MapAction.External.Ui.MapTypeSelected(it)) },
                 onExpandedItemsChanged = {
                     mapModel(
                         MapAction.External.Ui.Controls
@@ -303,6 +323,7 @@ fun RewindMap(
                 onCardClick = onCardClick,
                 onFavoritesClick = onFavoritesClick,
                 onViewAsListClick = onViewAsListClick,
+                onSettingsClick = onSettingsClick,
                 modifier =
                     Modifier.onSizeChanged {
                         stripHeight = with(localDensity) { it.height.toDp() }

@@ -2,6 +2,7 @@ package com.chizberg.rewind.features.map
 
 import com.chizberg.rewind.domain.Coordinate
 import com.chizberg.rewind.domain.ImageRequestFilters
+import com.chizberg.rewind.domain.MapType
 import com.chizberg.rewind.domain.ModelCluster
 import com.chizberg.rewind.domain.ModelImage
 import com.chizberg.rewind.domain.Region
@@ -18,8 +19,7 @@ enum class MapControlItem {
 }
 
 /**
- * The map screen's state. Port of iOS `MapState`, trimmed to what is ported so far (clustering,
- * loading, previews, location); map type arrives with its later milestone.
+ * The map screen's state. Port of iOS `MapState`.
  *
  * Divergence from iOS: carries [zoom] explicitly. iOS reconstructs zoom from the region span via
  * the map size; we read Google Maps' camera zoom directly (see Zoom.kt), so `regionChanged` brings
@@ -37,6 +37,9 @@ data class MapState(
     val lastLoadedParams: AnnotationLoadingParams?,
     val clusters: Set<ModelCluster>,
     val clusteredImages: Map<ClusteringCell, CellValue>,
+    // The base map's style (iOS `MapState.mapType`). Transient, never persisted: it starts at
+    // `Scheme` on every launch, exactly as iOS's `makeInitial` does.
+    val mapType: MapType = MapType.Scheme,
     // Deduped, sorted images visible in the current region — the source for both the preview strip
     // and the "view as list" screen (iOS `currentRegionImages`). Recomputed on `updatePreviews`.
     val currentRegionImages: List<ModelImage> = emptyList(),

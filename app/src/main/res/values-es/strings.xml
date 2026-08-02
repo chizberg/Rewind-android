@@ -39,4 +39,52 @@
     <string name="search_clear">Borrar</string>
     <string name="go_to_settings">Ir a Ajustes</string>
     <string name="my_location">Mi ubicación</string>
+
+    <!-- M13: settings screen -->
+    <string name="settings">Ajustes</string>
+    <string name="settings_section_map">Mapa</string>
+    <string name="settings_open_cluster_previews">Abrir vistas previas de clústeres grandes al tocar</string>
+    <string name="settings_section_gradient_picker">Selector de degradado</string>
+    <string name="settings_section_pastvu">PastVu</string>
+    <string name="settings_view_pastvu_website">Abrir sitio web de PastVu</string>
+    <string name="settings_pastvu_rules">Reglas de PastVu</string>
+    <string name="settings_pastvu_api_footer">Rewind usa la API de PastVu para obtener fotos y pinturas</string>
+    <string name="settings_pastvu_thanks_footer">Esta aplicación no sería posible sin PastVu</string>
+    <string name="settings_section_about">Acerca de</string>
+    <string name="settings_contact_developer">Contactar al desarrollador</string>
+    <string name="settings_view_source_code">Ver código fuente</string>
+    <string name="settings_made_by">"Hecho por "</string>
+    <string name="settings_with_help_from">con un poco de ayuda de:</string>
+
+    <!-- M13: base map style (the floating menu’s scheme/satellite toggle) -->
+    <string name="map_type_scheme">Estándar</string>
+    <string name="map_type_satellite">Satélite</string>
+
+    <!-- M13: first-run onboarding -->
+    <string name="onboarding_hi">¡Hola!</string>
+    <string name="onboarding_this_is">"Esto es "</string>
+    <string name="onboarding_time_travel_app">Una app de viajes en el tiempo</string>
+    <string name="onboarding_get_started">Empezar</string>
+    <string name="onboarding_lets_see">¡Vamos!</string>
+    <string name="onboarding_history_near_you_title">Historia cerca de ti</string>
+    <string name="onboarding_history_near_you_description">Explora fotos y pinturas antiguas de\u00A0lugares en\u00A0el\u00A0mapa</string>
+    <string name="onboarding_images_saving_title">Guarda tus favoritos</string>
+    <string name="onboarding_images_saving_description">Crea una\u00A0colección de\u00A0tus momentos y\u00A0lugares más\u00A0espectaculares</string>
+    <string name="onboarding_comparison_title">Compara el pasado y el presente</string>
+    <string name="onboarding_comparison_description">Usa tu cámara para comparar el mismo lugar a lo largo del tiempo</string>
+    <string name="onboarding_street_view_title">Street View</string>
+    <string name="onboarding_street_view_description">Vea cómo se ve el lugar hoy con Google Street View</string>
+    <string name="onboarding_translate_title">Traducir</string>
+    <string name="onboarding_translate_description">Las descripciones en un idioma extranjero se pueden traducir al tuyo con un solo toque</string>
+    <string name="onboarding_history_on_a_map">Historia en un mapa</string>
+    <string name="onboarding_what_do_images_look_like">¿Cómo se ven las imágenes?</string>
+    <string name="onboarding_single_image_title">Imagen individual</string>
+    <string name="onboarding_single_image_description">Muestra la dirección. Puedes ver los detalles de la imagen al tocarla</string>
+    <string name="onboarding_group_of_images_title">Grupo de imágenes</string>
+    <string name="onboarding_group_of_images_description">Varias imágenes que están cerca unas de otras. Abre una lista completa al tocar</string>
+    <string name="onboarding_cluster_of_images_title">Grupo de imágenes</string>
+    <string name="onboarding_cluster_of_images_description">Un grupo grande de imágenes. Para verlas todas, necesitas acercarte</string>
+    <string name="onboarding_date">Cada imagen tiene ubicación y fecha. La fecha tiene un color correspondiente</string>
+    <string name="onboarding_pastvu">Rewind utiliza la API de PastVu para obtener todas las fotos históricas, pinturas y sus datos asociados.</string>
+    <string name="onboarding_location">Rewind necesita tu ubicación para mostrar fotos y pinturas cerca de ti. Sin ella aún puedes usar la app</string>
 </resources>

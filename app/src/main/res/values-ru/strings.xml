@@ -39,4 +39,52 @@
     <string name="search_clear">Очистить</string>
     <string name="go_to_settings">Открыть настройки</string>
     <string name="my_location">Моё местоположение</string>
+
+    <!-- M13: settings screen -->
+    <string name="settings">Настройки</string>
+    <string name="settings_section_map">Карта</string>
+    <string name="settings_open_cluster_previews">Открывать превью больших кластеров по тапу</string>
+    <string name="settings_section_gradient_picker">Выбор градиента</string>
+    <string name="settings_section_pastvu">PastVu</string>
+    <string name="settings_view_pastvu_website">Открыть сайт PastVu</string>
+    <string name="settings_pastvu_rules">Правила PastVu</string>
+    <string name="settings_pastvu_api_footer">Rewind использует PastVu API для получения фотографий и картин</string>
+    <string name="settings_pastvu_thanks_footer">Это приложение было бы невозможно без PastVu</string>
+    <string name="settings_section_about">О приложении</string>
+    <string name="settings_contact_developer">Связаться с разработчиком</string>
+    <string name="settings_view_source_code">Открыть исходный код</string>
+    <string name="settings_made_by">"Сделано "</string>
+    <string name="settings_with_help_from">с небольшой помощью от:</string>
+
+    <!-- M13: base map style (the floating menu’s scheme/satellite toggle) -->
+    <string name="map_type_scheme">Схема</string>
+    <string name="map_type_satellite">Спутник</string>
+
+    <!-- M13: first-run onboarding -->
+    <string name="onboarding_hi">Привет!</string>
+    <string name="onboarding_this_is">"Это "</string>
+    <string name="onboarding_time_travel_app">Приложение для путешествий во времени</string>
+    <string name="onboarding_get_started">Начнём!</string>
+    <string name="onboarding_lets_see">Вперёд!</string>
+    <string name="onboarding_history_near_you_title">История вокруг вас</string>
+    <string name="onboarding_history_near_you_description">Просматривайте старые фотографии и картины мест на карте</string>
+    <string name="onboarding_images_saving_title">Сохраняйте избранное</string>
+    <string name="onboarding_images_saving_description">Создайте коллекцию самых захватывающих мест и моментов</string>
+    <string name="onboarding_comparison_title">Сравните прошлое с настоящим</string>
+    <string name="onboarding_comparison_description">Используйте камеру, чтобы сравнить место спустя годы</string>
+    <string name="onboarding_street_view_title">Street View</string>
+    <string name="onboarding_street_view_description">Посмотрите, как место выглядит сейчас, с помощью Google Street View</string>
+    <string name="onboarding_translate_title">Перевод</string>
+    <string name="onboarding_translate_description">Описания на иностранном языке можно перевести на ваш одним нажатием</string>
+    <string name="onboarding_history_on_a_map">История на карте</string>
+    <string name="onboarding_what_do_images_look_like">Как выглядят изображения?</string>
+    <string name="onboarding_single_image_title">Одна картинка</string>
+    <string name="onboarding_single_image_description">Показывает направление. По касанию открывает детали изображения</string>
+    <string name="onboarding_group_of_images_title">Группа картинок</string>
+    <string name="onboarding_group_of_images_description">Несколько изображений, которые находятся рядом. По касанию откроется список</string>
+    <string name="onboarding_cluster_of_images_title">Кластер картинок</string>
+    <string name="onboarding_cluster_of_images_description">Большая группа изображений. Нужно приблизить, чтобы увидеть все</string>
+    <string name="onboarding_date">У всего есть локация и дата. Дате соответствует цвет</string>
+    <string name="onboarding_pastvu">Rewind использует PastVu API для получения всех исторических фотографий, картин и данных о них</string>
+    <string name="onboarding_location">Rewind нужна ваша локация чтобы показывать фотографии и картины рядом. Без этого доступа приложение тоже можно использовать</string>
 </resources>

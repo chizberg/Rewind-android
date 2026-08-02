@@ -96,6 +96,11 @@ fun makeMapModel(
                 state.copy(filters = newFilters)
             }
 
+            // iOS also fires `applyMapType(mapType)` here, an imperative poke at the live
+            // `MKMapView`; ours is declarative — `RewindMap` reads the field off the state — so the
+            // state change is the whole branch.
+            is MapAction.External.Ui.MapTypeSelected -> state.copy(mapType = action.mapType)
+
             is MapAction.External.Ui.Controls.SetExpandedItems ->
                 state.copy(controls = state.controls.copy(expandedItems = action.items))
 

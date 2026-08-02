@@ -12,6 +12,11 @@ import com.chizberg.rewind.core.util.lerpParameter
  * Divergence from iOS: `rewind`/`pastvu` reference UIKit **system colours** on iOS; here every
  * stop is a fixed sRGB triple (system colours aren't portable and would drift between platforms).
  * The `rewind` stops use the standard iOS light-mode system-colour sRGB values.
+ *
+ * Serializable (iOS `Codable`) so the chosen scheme persists by name inside the settings blob. No
+ * `@Serializable` annotation: kotlinx.serialization handles a plain enum on its own, and adding it
+ * here makes the plugin bolt `serializer()` onto the **private** companion below, which the JVM
+ * backend then cannot generate an accessor for (an internal compiler error, not a diagnostic).
  */
 enum class GradientScheme {
     Rewind,

@@ -1,6 +1,7 @@
 package com.chizberg.rewind.features.map
 
 import com.chizberg.rewind.domain.ImageRequestFilters
+import com.chizberg.rewind.domain.MapType
 import com.chizberg.rewind.domain.ModelCluster
 import com.chizberg.rewind.domain.ModelImage
 import com.chizberg.rewind.domain.Region
@@ -8,7 +9,8 @@ import com.chizberg.rewind.network.AnnotationLoadingParams
 
 /**
  * Actions for [makeMapModel]. Port of iOS `MapAction`, trimmed to the region loading + filters +
- * controls + location scope; annotation selection and map type arrive with their later milestones.
+ * controls + location + map-type scope; annotation selection is handled at the UI boundary here (a
+ * tap picks its route in `RewindMap`, since the camera lives in Compose), not by the reducer.
  * The External.Map / External.Ui / Internal nesting mirrors iOS so both codebases read in parallel.
  */
 sealed interface MapAction {
@@ -39,6 +41,11 @@ sealed interface MapAction {
 
             data class FiltersChanged(
                 val filters: ImageRequestFilters,
+            ) : Ui
+
+            /** The floating menu's scheme/satellite toggle (iOS `mapTypeSelected`). */
+            data class MapTypeSelected(
+                val mapType: MapType,
             ) : Ui
 
             /** Port of iOS `MapAction.External.UI.controls`, trimmed to the expansion set. */

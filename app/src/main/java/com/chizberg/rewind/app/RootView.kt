@@ -13,10 +13,13 @@ import com.chizberg.rewind.features.details.ui.ImageDetailsView
 import com.chizberg.rewind.features.imagelist.ui.ImageListView
 import com.chizberg.rewind.features.map.AnnotationValue
 import com.chizberg.rewind.features.map.LocationAction
+import com.chizberg.rewind.features.map.MapAction
 import com.chizberg.rewind.features.map.PreviewCard
 import com.chizberg.rewind.features.map.ui.LocalRewindImageLoader
 import com.chizberg.rewind.features.map.ui.RewindMap
+import com.chizberg.rewind.features.onboarding.ui.OnboardingView
 import com.chizberg.rewind.features.search.ui.SearchView
+import com.chizberg.rewind.features.settings.ui.SettingsView
 import com.chizberg.rewind.ui.Overlay
 import com.chizberg.rewind.ui.OverlayHost
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -27,10 +30,10 @@ private const val THUMBNAIL_SOURCE = "thumbnail"
 
 /**
  * The app's root. Port of iOS `RootView`: the map with its controls, plus state-managed overlays on
- * top (image details, the image list, the place search, alerts; the settings/onboarding overlays
- * land in their milestone). The [AppGraph] is held by [RewindViewModel], so it — and all the loaded map state —
- * survives activity recreation (rotation, or a recreate while the process lives) instead of being
- * rebuilt. The camera restores separately from saved instance state (maps-compose's
+ * top (image details, the image list, the place search, the settings screen, the first-run
+ * onboarding, alerts). The [AppGraph] is held by [RewindViewModel], so it — and all the loaded map
+ * state — survives activity recreation (rotation, or a recreate while the process lives) instead of
+ * being rebuilt. The camera restores separately from saved instance state (maps-compose's
  * `rememberCameraPositionState` is `rememberSaveable`).
  *
  * [RewindMap] is composed here permanently, never as a navigation destination, and overlays are
@@ -91,6 +94,7 @@ fun RootView(modifier: Modifier = Modifier) {
                     imageLoader = graph.imageLoader,
                     scheme = appState.gradientScheme,
                     focusRequests = graph.focusRequests,
+                    openClusterPreviews = graph.openClusterPreviews,
                     onCardClick = { card -> presentCard(card) { graph.appModel(it) } },
                     onAnnotationClick = { annotation ->
                         presentAnnotation(annotation) { graph.appModel(it) }
@@ -105,6 +109,17 @@ fun RootView(modifier: Modifier = Modifier) {
                         graph.appModel(AppAction.ImageList.PresentCurrentRegionImages)
                     },
                     onSearchClick = { graph.appModel(AppAction.Search.Present) },
+                    onSettingsClick = { graph.appModel(AppAction.Settings.Present) },
+                    // Port of iOS's `.task { if appStore.onboardingStore == nil { … } }`: while the
+                    // onboarding is up the map must NOT announce itself, or the system location
+                    // dialog would pop over the welcome screen — something iOS never does.
+                    // Finishing the onboarding sends the action by hand instead (see
+                    // `AppGraph.onFinish`).
+                    onMapLoaded = {
+                        if (appState.onboardingModel == null) {
+                            graph.mapModel(MapAction.External.Ui.MapViewLoaded)
+                        }
+                    },
                     modifier = Modifier.fillMaxSize(),
                 )
             },
@@ -147,6 +162,32 @@ fun RootView(modifier: Modifier = Modifier) {
                         onDismiss = { graph.appModel(AppAction.Search.Dismiss) },
                     )
                 }
+
+                Overlay(
+                    target = appState.settingsModel,
+                    onBack = { graph.appModel(AppAction.Settings.Dismiss) },
+                ) { settingsModel ->
+                    SettingsView(
+                        model = settingsModel,
+                        onDismiss = { graph.appModel(AppAction.Settings.Dismiss) },
+                    )
+                }
+
+                // Declared last, so it is the topmost layer on a first launch. Like iOS's
+                // `.fullScreenCover`, it cannot be backed out of — the only way on is the final
+                // button, because a wizard the user skipped by reflex is a wizard they never saw.
+                // A null `onBack` (rather than an empty one) takes the layer out of the gesture
+                // altogether, so back falls through to the activity and minimises the app the way
+                // the home gesture does on iOS; the wizard is still there on the way back.
+                Overlay(
+                    target = appState.onboardingModel,
+                    onBack = null,
+                ) { onboardingModel ->
+                    OnboardingView(
+                        model = onboardingModel,
+                        scheme = appState.gradientScheme,
+                    )
+                }
             },
         )
 
@@ -173,13 +214,20 @@ private fun presentCard(
 }
 
 /**
- * Routes a tapped image annotation to its details screen. Only images reach here — a server cluster
- * zooms the map in ([RewindMap]) and a local cluster opens the "Cluster" list (`onLocalClusterClick`);
- * the server-cluster preview route lands with the "open cluster previews" setting (M13).
+ * Routes a tapped annotation to a details screen. An image opens itself; a server cluster opens the
+ * representative image it was drawn from — but only reaches here when the "open cluster previews"
+ * setting is on, since otherwise [RewindMap] zooms the map in instead. A local cluster never
+ * arrives here at all (it opens the "Cluster" list through `onLocalClusterClick`).
  */
 private fun presentAnnotation(
     annotation: AnnotationValue,
     dispatch: (AppAction) -> Unit,
 ) {
-    annotation.image?.let { dispatch(AppAction.ImageDetails.Present(it, THUMBNAIL_SOURCE)) }
+    val image =
+        when (annotation) {
+            is AnnotationValue.Image -> annotation.value
+            is AnnotationValue.Cluster -> annotation.value.preview
+            is AnnotationValue.LocalCluster -> null
+        }
+    image?.let { dispatch(AppAction.ImageDetails.Present(it, THUMBNAIL_SOURCE)) }
 }

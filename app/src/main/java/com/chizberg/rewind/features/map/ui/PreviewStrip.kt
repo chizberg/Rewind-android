@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.FormatListBulleted
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -47,10 +48,9 @@ import com.chizberg.rewind.ui.toComposeColor
  * the bottom screen edge — where the device's own screen corner clips it, so its bottom corners are
  * concentric with the display for free on every device — and only its top corners are rounded. Its
  * background extends behind the navigation bar while the cards are inset above the home indicator.
- * A fixed leading column carries the favorites (star) and view-as-list buttons (iOS
- * `MapControls.makeBottomScrollButton`), each an entry into a full-screen grid list; the settings
- * button and the drag-minimize gesture land with their later milestones (M13 / M16). Cards are
- * tinted by year via [scheme] over [maxRange] (mirrors the map annotations). */
+ * A fixed leading column carries the favorites (star), view-as-list and settings buttons (iOS
+ * `MapControls.makeBottomScrollButton`); the drag-minimize gesture lands with its later milestone
+ * (M16). Cards are tinted by year via [scheme] over [maxRange] (mirrors the map annotations). */
 @Composable
 fun PreviewStrip(
     previews: List<PreviewCard>,
@@ -60,6 +60,7 @@ fun PreviewStrip(
     onCardClick: (PreviewCard) -> Unit,
     onFavoritesClick: () -> Unit,
     onViewAsListClick: () -> Unit,
+    onSettingsClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -101,6 +102,7 @@ fun PreviewStrip(
                     StripControls(
                         onFavoritesClick = onFavoritesClick,
                         onViewAsListClick = onViewAsListClick,
+                        onSettingsClick = onSettingsClick,
                         modifier = Modifier.height(CardHeight),
                     )
                 }
@@ -131,15 +133,15 @@ fun PreviewStrip(
 }
 
 /**
- * The strip's fixed leading controls: favorites (star) above view-as-list, each opening a
- * full-screen grid list. Port of the iOS `MapControls` leading button column (minus the settings
- * button, which lands with Settings in M13). Sized to the card's footprint so it reads as part of
- * the row.
+ * The strip's fixed leading controls: favorites (star), view-as-list and settings, stacked in that
+ * order. Port of the iOS `MapControls` leading button column (`star` / `list.bullet` / `gearshape`,
+ * same order). Sized to the card's footprint so it reads as part of the row.
  */
 @Composable
 private fun StripControls(
     onFavoritesClick: () -> Unit,
     onViewAsListClick: () -> Unit,
+    onSettingsClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -156,6 +158,12 @@ private fun StripControls(
             icon = Icons.AutoMirrored.Rounded.FormatListBulleted,
             contentDescription = stringResource(R.string.preview_view_as_list),
             onClick = onViewAsListClick,
+            modifier = Modifier.weight(1f),
+        )
+        StripControlButton(
+            icon = Icons.Rounded.Settings,
+            contentDescription = stringResource(R.string.settings),
+            onClick = onSettingsClick,
             modifier = Modifier.weight(1f),
         )
     }
