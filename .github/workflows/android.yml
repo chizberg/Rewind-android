@@ -7,8 +7,35 @@ on:
     branches: [ main ]
 
 jobs:
-  build:
+  # One job per check, so the merge box names what broke instead of a single "build" that could be
+  # anything from a stray space to a failing test. A matrix rather than four copy-pasted jobs: the
+  # setup is identical and only the Gradle invocation differs. `fail-fast: false` matters — a red
+  # formatter must not cancel the tests, otherwise the next push fixes the formatting and only then
+  # discovers the test failure.
+  #
+  # The price of the split is that each job gets its own runner and compiles the sources again;
+  # Gradle's cache softens it, but the wall clock is longer than one job doing everything.
+  #
+  # Job names double as the required status check contexts in the `main CI and history` ruleset —
+  # renaming one here silently drops its gate until the ruleset is updated too.
+  check:
+    name: ${{ matrix.name }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: format
+            tasks: spotlessCheck detekt
+          - name: test
+            tasks: testDebugUnitTest
+          - name: lint
+            tasks: lint
+          # assembleRelease, not assembleDebug: it is the variant that ships, and AGP hangs
+          # lintVitalRelease off it, so the fatal-severity checks come along. Once M16 turns R8 on,
+          # a missing keep rule starts failing here without touching this file.
+          - name: build
+            tasks: assembleRelease
     steps:
       - uses: actions/checkout@v4
 
@@ -21,15 +48,5 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Check formatting (Spotless/ktlint) and static analysis (detekt)
-        run: ./gradlew spotlessCheck detekt --stacktrace
-
-      - name: Run unit tests and Android lint
-        run: ./gradlew testDebugUnitTest lint --stacktrace
-
-      # The steps above compile debug sources and lint the debug variant, but never package
-      # anything: a broken manifest merge, a resource that only fails at link time, or (once M16
-      # turns R8 on) a missing keep rule would all reach main green. assembleRelease is the variant
-      # that ships, and AGP hangs lintVitalRelease off it, so the fatal-severity checks come along.
-      - name: Assemble release APK
-        run: ./gradlew assembleRelease --stacktrace
+      - name: ./gradlew ${{ matrix.tasks }}
+        run: ./gradlew ${{ matrix.tasks }} --stacktrace
