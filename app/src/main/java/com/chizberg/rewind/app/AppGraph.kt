@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.Preferences
 import coil3.ImageLoader
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import com.chizberg.rewind.BuildConfig
+import com.chizberg.rewind.R
 import com.chizberg.rewind.core.redux.Property
 import com.chizberg.rewind.core.redux.Reducer
 import com.chizberg.rewind.core.util.OrientationLock
@@ -21,6 +22,7 @@ import com.chizberg.rewind.features.comparison.ComparisonState
 import com.chizberg.rewind.features.comparison.ComparisonViewDeps
 import com.chizberg.rewind.features.comparison.makeComparisonModel
 import com.chizberg.rewind.features.details.ComparisonFactory
+import com.chizberg.rewind.features.details.LanguageDetector
 import com.chizberg.rewind.features.details.makeImageDetailsModel
 import com.chizberg.rewind.features.favorites.FavoritesModel
 import com.chizberg.rewind.features.favorites.isFavorite
@@ -95,7 +97,19 @@ class AppGraph(
             .components { add(OkHttpNetworkFetcherFactory()) }
             .build()
 
-    private val remotes = RewindRemotes(RequestPerformer(okHttpRequestPerformer(OkHttpClient())))
+    private val remotes =
+        RewindRemotes(
+            RequestPerformer(
+                okHttpRequestPerformer(
+                    OkHttpClient
+                        .Builder()
+                        // Only translation needs it; see the interceptor for why the other Google
+                        // endpoint doesn't.
+                        .addInterceptor(AndroidClientInterceptor(appContext))
+                        .build(),
+                ),
+            ),
+        )
 
     /** Gallery / share sheet, both fed from [imageLoader]'s cache. */
     private val imageExport = ImageExport(appContext, imageLoader)
@@ -293,6 +307,10 @@ class AppGraph(
         )
     }
 
+    // One detector per graph — it holds no per-screen state, and ML Kit only wakes up on the first
+    // description that needs classifying (see MlKitLanguageDetector).
+    private val languageDetector: LanguageDetector = MlKitLanguageDetector()
+
     private val imageDetailsFactory: ImageDetailsFactory = { image, source ->
         makeImageDetailsModel(
             modelImage = image,
@@ -316,6 +334,17 @@ class AppGraph(
             shareImage = imageExport::share,
             makeComparison = comparisonFactory,
             setOrientationLock = { orientationLockMutable.value = it },
+            translate = remotes.translate,
+            detectLanguage = languageDetector,
+            // iOS reads `Bundle.main.preferredLocalizations.first` — the localization the *bundle*
+            // picked, already matched against the ones it ships. `Locale.getDefault().language` is
+            // not that: on a Japanese phone it answers "ja" while every string on screen is the
+            // English fallback, so a Japanese description would look "already translated". The
+            // string below is the language code of whichever `values-*` folder Android actually
+            // resolved — the same question iOS asks, answered by the same resource machinery.
+            // Read per screen, so a change in the system's per-app language picker takes hold on
+            // the next one (the graph outlives the activity that recreation rebuilds).
+            appLanguage = appContext.getString(R.string.app_language),
             extractModelImage = ::extractModelImage,
             scope = scope,
         )

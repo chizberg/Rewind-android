@@ -97,4 +97,10 @@
     <string name="comparison_style_card_on_card">Carte sur carte</string>
     <string name="comparison_zoom_in">Zoom avant</string>
     <string name="comparison_zoom_out">Zoom arrière</string>
+
+    <!-- M15: description translation -->
+    <string name="translate">Traduire</string>
+    <string name="show_original">Afficher l\'original</string>
+    <!-- The language code of this folder, not a word to translate — see values/strings.xml. -->
+    <string name="app_language">fr</string>
 </resources>

@@ -1,6 +1,7 @@
 package com.chizberg.rewind.features.details.ui
 
 import androidx.annotation.StringRes
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
@@ -8,6 +9,7 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -43,7 +45,10 @@ import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.StarBorder
+import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -89,6 +94,8 @@ import com.chizberg.rewind.features.details.ImageDetailsAction
 import com.chizberg.rewind.features.details.ImageDetailsModel
 import com.chizberg.rewind.features.details.ImageDetailsState
 import com.chizberg.rewind.features.details.MapApp
+import com.chizberg.rewind.features.details.Translation
+import com.chizberg.rewind.features.details.TranslationState
 import com.chizberg.rewind.features.map.ui.LocalRewindImageLoader
 import com.chizberg.rewind.features.map.ui.RewindAsyncImage
 import com.chizberg.rewind.features.map.ui.rememberRewindImageRequest
@@ -291,7 +298,7 @@ private fun ScrollContent(
             state = state,
             scheme = scheme,
             maxRange = maxRange,
-            onLink = { model(ImageDetailsAction.DescriptionLink(it)) },
+            dispatch = model::invoke,
             modifier =
                 Modifier
                     .fillMaxWidth()
@@ -363,7 +370,7 @@ private fun SplitContent(
                 state = state,
                 scheme = scheme,
                 maxRange = maxRange,
-                onLink = { model(ImageDetailsAction.DescriptionLink(it)) },
+                dispatch = model::invoke,
                 modifier =
                     Modifier
                         .fillMaxWidth()
@@ -427,10 +434,11 @@ private fun DetailsPicture(
 /**
  * Title, description and the labelled fields.
  *
- * Two loads show up here. The screen's own (`details == null`) replaces the block with a spinner,
+ * Three waits show up here. The screen's own (`details == null`) replaces the block with a spinner,
  * as on iOS. A *link* load — a tap on a pastvu photo, which ends in a nested screen — blurs the
  * description behind a spinner, as on iOS; over a slow connection that stretch is long, and without
- * it the tap reads as if nothing happened.
+ * it the tap reads as if nothing happened. A translation in flight does the same (iOS `disabled =
+ * loadingAnotherImage || translationState == .translating`).
  *
  * Taps are dropped everywhere for that stretch, not only in the description: iOS reroutes link taps
  * into the reducer for the description alone, ours linkifies author, source and address through the
@@ -441,20 +449,27 @@ private fun TextDetails(
     state: ImageDetailsState,
     scheme: GradientScheme,
     maxRange: IntRange,
-    onLink: (String) -> Unit,
+    dispatch: (ImageDetailsAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val loading = state.loadingAnotherImage
+    val loading =
+        state.loadingAnotherImage || state.translationState == TranslationState.Translating
     val blurRadius by animateDpAsState(if (loading) DescriptionBlur else 0.dp, label = "blur")
     // The guard reads a live flag: the annotated strings — and the listeners baked into them — are
     // cached across the load, so a `loading` captured while parsing would go stale.
     val loadingNow = rememberUpdatedState(loading)
-    val currentOnLink = rememberUpdatedState(onLink)
+    val currentDispatch = rememberUpdatedState(dispatch)
     val guardedLink =
-        remember { { url: String -> if (!loadingNow.value) currentOnLink.value(url) } }
+        remember {
+            { url: String ->
+                if (!loadingNow.value) {
+                    currentDispatch.value(ImageDetailsAction.DescriptionLink(url))
+                }
+            }
+        }
 
     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        TitleRow(state.image, scheme, maxRange)
+        TitleRow(state.image, state.translation?.title, scheme, maxRange)
 
         val details = state.details
         if (details == null) {
@@ -471,9 +486,29 @@ private fun TextDetails(
             Box(contentAlignment = Alignment.Center) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     details.description?.let { desc ->
-                        Box(contentAlignment = Alignment.Center) {
-                            HtmlText(desc, guardedLink, Modifier.blur(blurRadius))
-                            if (loading) TextSpinner()
+                        // iOS `VStack(spacing: 3) { description; TextAccessoryButton }`.
+                        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Box(contentAlignment = Alignment.Center) {
+                                // The swap between the original and its translation fades (iOS
+                                // `.animation(.smooth, value: translationState)`); the translated
+                                // text goes through the same HTML parse, since Translate was asked
+                                // for `format: "text"` and hands the markup back as it found it.
+                                // `AnimatedContent`, not `Crossfade`: a translation is rarely as
+                                // tall as its original, and Crossfade animates opacity alone —
+                                // it holds the taller of the two while both are composed, then
+                                // drops to the new height in one frame, which the button below
+                                // rides down as a jump. The default `SizeTransform` carries the
+                                // height across instead, so the button travels with the text.
+                                AnimatedContent(
+                                    targetState = state.translation?.description ?: desc,
+                                    transitionSpec = { fadeIn() togetherWith fadeOut() },
+                                    label = "description",
+                                ) { shown ->
+                                    HtmlText(shown, guardedLink, Modifier.blur(blurRadius))
+                                }
+                                if (loading) TextSpinner()
+                            }
+                            TranslationButton(state.translationState, dispatch)
                         }
                     }
                     LabeledText(R.string.label_uploaded_by, AnnotatedString(details.username))
@@ -495,18 +530,29 @@ private fun TextDetails(
     }
 }
 
+/** The title, swapped for [translatedTitle] while a translation is shown — as on iOS, where the
+ *  translate button replaces the heading and the description together. */
 @Composable
 private fun TitleRow(
     image: ModelImage,
+    translatedTitle: String?,
     scheme: GradientScheme,
     maxRange: IntRange,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(
-            text = image.title,
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-        )
+        // Same reasoning as the description's swap: a translated title can take one line more or
+        // one line less, and the badges under it should follow rather than jump.
+        AnimatedContent(
+            targetState = translatedTitle ?: image.title,
+            transitionSpec = { fadeIn() togetherWith fadeOut() },
+            label = "title",
+        ) { shown ->
+            Text(
+                text = shown,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+            )
+        }
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -516,6 +562,56 @@ private fun TitleRow(
         }
     }
 }
+
+/**
+ * The button under the description. Port of iOS's `TextAccessoryButton` — a small capsule of text
+ * on the recessed tone — as M3's [AssistChip], which is that shape with a native tap target and
+ * ripple; the design pack's `translate` glyph rides in its leading slot (iOS's is text only).
+ *
+ * Which of the four states shows it is iOS's switch verbatim: offered when the description is in
+ * another language, "Show Original" while the translation is up, and nothing at all while the
+ * request is in flight — that gap is what keeps a second tap from starting a second request (the
+ * reducer does not deduplicate them, exactly as iOS doesn't).
+ */
+@Composable
+private fun TranslationButton(
+    translationState: TranslationState,
+    dispatch: (ImageDetailsAction) -> Unit,
+) {
+    when (translationState) {
+        TranslationState.Available ->
+            TranslationChip(R.string.translate) { dispatch(ImageDetailsAction.Translate) }
+
+        is TranslationState.Translated ->
+            TranslationChip(R.string.show_original) {
+                dispatch(ImageDetailsAction.ShowTranslationOriginal)
+            }
+
+        TranslationState.Translating, TranslationState.NotAvailable -> Unit
+    }
+}
+
+@Composable
+private fun TranslationChip(
+    @StringRes label: Int,
+    onClick: () -> Unit,
+) {
+    AssistChip(
+        onClick = onClick,
+        label = { Text(stringResource(label)) },
+        leadingIcon = {
+            Icon(
+                imageVector = Icons.Rounded.Translate,
+                contentDescription = null,
+                modifier = Modifier.size(AssistChipDefaults.IconSize),
+            )
+        },
+    )
+}
+
+/** Port of iOS's `fileprivate var translation`: the translation currently on screen, if any. */
+private val ImageDetailsState.translation: Translation?
+    get() = (translationState as? TranslationState.Translated)?.translation
 
 @Composable
 private fun LabeledText(

@@ -12,6 +12,8 @@ import com.chizberg.rewind.features.comparison.ComparisonState
 import com.chizberg.rewind.features.comparison.ComparisonViewDeps
 import com.chizberg.rewind.network.Remote
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import java.net.URI
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -53,6 +55,43 @@ data class ShareContent(
     val url: String,
 )
 
+/**
+ * Text + target language for one Cloud Translation call. The type lives in the network layer, where
+ * iOS keeps it too (`Network/RewindRemotes.swift`, beside the remote that consumes it); this alias
+ * re-exports the name into the one feature that uses it, so the reducer's signature reads exactly
+ * as iOS's does.
+ */
+typealias TranslateParams = com.chizberg.rewind.network.TranslateParams
+
+/**
+ * One cached title/description translation. Port of iOS `ImageDetailsState.Translation`.
+ *
+ * Divergence from iOS: raw strings, not `AttributedString` — HTML parsing for descriptions
+ * (including a translated one) lives in the UI layer on Android (`ImageDetailsView.kt`), not in
+ * this JVM-only reducer, per the M9 divergence note in CLAUDE.md.
+ */
+data class Translation(
+    val title: String,
+    val description: String,
+)
+
+/** Port of iOS `ImageDetailsState.TranslationState`. */
+sealed interface TranslationState {
+    /** The description is already in the app's language (or none was detected) — no button. */
+    data object NotAvailable : TranslationState
+
+    /** Translate is offered but hasn't been requested (or was reverted via "Show Original"). */
+    data object Available : TranslationState
+
+    /** A translate request is in flight. */
+    data object Translating : TranslationState
+
+    /** The cached-or-fresh translation is currently shown. */
+    data class Translated(
+        val translation: Translation,
+    ) : TranslationState
+}
+
 /** The image-details reducer. Port of iOS `ImageDetailsModel`. */
 typealias ImageDetailsModel = Reducer<ImageDetailsState, ImageDetailsAction>
 
@@ -67,7 +106,6 @@ typealias ImageDetailsModel = Reducer<ImageDetailsState, ImageDetailsAction>
  *   loader; the reducer only tracks that a save succeeded ([isImageSaved], as on iOS).
  * - **no `Identified` wrapper** around the nested details / alert: Compose overlays key off content
  *   presence, so plain nullables suffice.
- * - **translation** ([details]-driven `TranslationState`) is M15; its branches join then.
  */
 data class ImageDetailsState(
     val image: ModelImage,
@@ -83,6 +121,12 @@ data class ImageDetailsState(
     /** iOS `comparisonDeps`: the comparison screen while it is up (M14). */
     val comparison: ComparisonViewDeps? = null,
     val alert: AlertParams? = null,
+    /** Port of iOS `translationState`. Starts at iOS's `.notAvailable` and is settled once the
+     * details land and their description has been run past the language detector. */
+    val translationState: TranslationState = TranslationState.NotAvailable,
+    /** Port of iOS `cachedTranslation`: survives "Show Original", spent only by a fresh
+     * `makeImageDetailsModel` (a new screen instance). */
+    val cachedTranslation: Translation? = null,
 )
 
 sealed interface ImageDetailsAction {
@@ -155,6 +199,14 @@ sealed interface ImageDetailsAction {
         data object Dismiss : Alert
     }
 
+    /** Port of iOS top-level `.translate`. Cache hit (a non-null `cachedTranslation`) resolves
+     * synchronously; otherwise kicks off the title+description translate request. */
+    data object Translate : ImageDetailsAction
+
+    /** Port of iOS top-level `.showTranslationOriginal`: revert to the untranslated text without
+     * discarding the cache. */
+    data object ShowTranslationOriginal : ImageDetailsAction
+
     sealed interface Internal : ImageDetailsAction {
         /** Both save entry points (the action tile and the viewer's chrome) funnel through here. */
         data object SaveImage : Internal
@@ -168,8 +220,39 @@ sealed interface ImageDetailsAction {
         data class AnotherImageLoadFailed(
             val error: Throwable,
         ) : Internal
+
+        /**
+         * The description's language came back from the detector — the one action iOS has no
+         * counterpart for. There, `detectLanguage` is a synchronous call inside `apply(details:)`,
+         * so `translationState` is settled in the very same reduce that stores the details; ML Kit
+         * answers through a `Task`, so the verdict has to come back as its own action. Null is
+         * "couldn't tell" (iOS's `dominantLanguage == nil`) — including a detector that failed.
+         */
+        data class DescriptionLanguageDetected(
+            val language: DetectedLanguage?,
+        ) : Internal
+
+        /** Port of iOS `.internal(.translationComplete(_:))`. */
+        data class TranslationComplete(
+            val translation: Translation,
+        ) : Internal
+
+        /** Port of iOS `.internal(.translationFailed(_:))`. */
+        data class TranslationFailed(
+            val error: Throwable,
+        ) : Internal
     }
 }
+
+/**
+ * How sure the detector has to be before its verdict is trusted, straight from iOS
+ * (`descriptionLang.confidence >= 0.9`). Below it the language is treated as unknown, which offers
+ * the translation rather than hiding it — the safer way to be wrong.
+ */
+private const val MIN_LANGUAGE_CONFIDENCE = 0.9f
+
+/** The fallback target language, for callers that don't name one (reducer tests). */
+private const val DEFAULT_APP_LANGUAGE = "en"
 
 /** iOS `ImageDetailsView.TransitionSource.descriptionLink`; also the nested screen's open source. */
 const val DESCRIPTION_LINK_SOURCE = "descriptionLink"
@@ -185,6 +268,12 @@ const val DESCRIPTION_LINK_SOURCE = "descriptionLink"
  * Recursion: a description link to a pastvu photo loads that photo and presents it as a nested
  * details screen ([ImageDetailsState.anotherImageModel]) built with the same dependencies. The
  * nested [remote] short-circuits the just-loaded details so the child's own load doesn't refetch.
+ *
+ * Translation takes three of those dependencies: [detectLanguage] decides whether the button is
+ * offered at all, [translate] fetches the title and the description, and [appLanguage] is both the
+ * target it asks for and what a detected language is compared against. iOS reads its `appLang` off
+ * `Bundle.main.preferredLocalizations` inside this file; here the equivalent needs Android
+ * resources, so the app layer resolves it and passes it in (see `AppGraph`).
  */
 @Suppress("TooGenericExceptionCaught", "LongParameterList")
 fun makeImageDetailsModel(
@@ -203,6 +292,11 @@ fun makeImageDetailsModel(
     // both.
     makeComparison: ComparisonFactory = { _, _ -> error("No comparison factory was injected") },
     setOrientationLock: (OrientationLock?) -> Unit = {},
+    translate: Remote<TranslateParams, String>,
+    // "Couldn't tell", the same as a description in an unrecognised language: a caller that never
+    // shows the button (a reducer test) needs no ML Kit. The graph always passes the real one.
+    detectLanguage: LanguageDetector = LanguageDetector { null },
+    appLanguage: String = DEFAULT_APP_LANGUAGE,
     extractModelImage: (ModelImageDetails) -> ModelImage,
     scope: CoroutineScope,
 ): ImageDetailsModel =
@@ -426,6 +520,9 @@ fun makeImageDetailsModel(
                         shareImage = shareImage,
                         makeComparison = makeComparison,
                         setOrientationLock = setOrientationLock,
+                        translate = translate,
+                        detectLanguage = detectLanguage,
+                        appLanguage = appLanguage,
                         extractModelImage = extractModelImage,
                         scope = scope,
                     )
@@ -438,6 +535,53 @@ fun makeImageDetailsModel(
                 action.params?.let { state.copy(alert = it) } ?: state
 
             ImageDetailsAction.Alert.Dismiss -> state.copy(alert = null)
+
+            ImageDetailsAction.Translate -> {
+                val description = state.details?.description
+                val cached = state.cachedTranslation
+                when {
+                    // iOS asserts here and returns; the button is never drawn without a
+                    // description, so in a shipped build this is simply nothing happening.
+                    description == null -> state
+
+                    // Translated once, free ever after — "Show Original" keeps the cache, so
+                    // toggling back and forth never touches the network again.
+                    cached != null ->
+                        state.copy(translationState = TranslationState.Translated(cached))
+
+                    else -> {
+                        val title = modelImage.title
+                        // No id, hence no deduplication: a second tap would run a second request,
+                        // exactly as on iOS. What keeps that from happening is the button, which
+                        // is gone while `Translating` — not the reducer.
+                        asyncEffect(
+                            AsyncEffect.perform { send ->
+                                try {
+                                    send(
+                                        ImageDetailsAction.Internal.TranslationComplete(
+                                            fetchTranslation(
+                                                translate = translate,
+                                                title = title,
+                                                description = description,
+                                                target = appLanguage,
+                                            ),
+                                        ),
+                                    )
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    send(ImageDetailsAction.Internal.TranslationFailed(e))
+                                }
+                            },
+                        )
+                        state.copy(translationState = TranslationState.Translating)
+                    }
+                }
+            }
+
+            ImageDetailsAction.ShowTranslationOriginal ->
+                // The cache deliberately survives: see the `Translate` branch above.
+                state.copy(translationState = TranslationState.Available)
 
             ImageDetailsAction.Internal.SaveImage -> {
                 val image = state.image
@@ -460,7 +604,57 @@ fun makeImageDetailsModel(
             // feedback handle lives.
             ImageDetailsAction.Internal.ImageSaved -> state.copy(isImageSaved = true)
 
-            is ImageDetailsAction.Internal.DetailsLoaded -> state.copy(details = action.details)
+            // Port of iOS `apply(details:to:)`, split in two because the detector is asynchronous
+            // here: the payload lands now, the translation verdict in
+            // `DescriptionLanguageDetected` below. A photo without a description takes iOS's else
+            // branch straight away (`.available` — moot, since the button hangs off the
+            // description block that isn't there).
+            is ImageDetailsAction.Internal.DetailsLoaded -> {
+                val description = action.details.description
+                if (description == null) {
+                    state.copy(
+                        details = action.details,
+                        translationState = TranslationState.Available,
+                    )
+                } else {
+                    asyncEffect(
+                        AsyncEffect.perform { send ->
+                            val language =
+                                try {
+                                    detectLanguage.detect(description)
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (
+                                    @Suppress("SwallowedException") e: Exception,
+                                ) {
+                                    // A detector that fell over knows as little as one that had no
+                                    // guess: iOS's nil branch, which offers the translation.
+                                    null
+                                }
+                            send(
+                                ImageDetailsAction.Internal.DescriptionLanguageDetected(language),
+                            )
+                        },
+                    )
+                    state.copy(details = action.details)
+                }
+            }
+
+            is ImageDetailsAction.Internal.DescriptionLanguageDetected -> {
+                val language = action.language
+                val sameLanguage =
+                    language != null &&
+                        language.confidence >= MIN_LANGUAGE_CONFIDENCE &&
+                        language.languageCode == appLanguage
+                state.copy(
+                    translationState =
+                        if (sameLanguage) {
+                            TranslationState.NotAvailable
+                        } else {
+                            TranslationState.Available
+                        },
+                )
+            }
 
             is ImageDetailsAction.Internal.AnotherImageLoadFailed -> {
                 asyncEffect(
@@ -470,7 +664,47 @@ fun makeImageDetailsModel(
                 )
                 state.copy(loadingAnotherImage = false)
             }
+
+            is ImageDetailsAction.Internal.TranslationComplete ->
+                state.copy(
+                    translationState = TranslationState.Translated(action.translation),
+                    cachedTranslation = action.translation,
+                )
+
+            is ImageDetailsAction.Internal.TranslationFailed -> {
+                asyncEffect(
+                    AsyncEffect.anotherAction(
+                        action =
+                            present(errorAlert("Unable to translate description", action.error)),
+                    ),
+                )
+                // Back to `Available`, so the button returns and the tap can be retried.
+                state.copy(translationState = TranslationState.Available)
+            }
         }
+    }
+
+/**
+ * Both halves of a translation, fetched at once. Port of the two `async let`s in iOS's `.translate`
+ * effect: the title and the description go out together rather than one after the other (half the
+ * latency), and a failure of either cancels the other and surfaces as the failure of the whole —
+ * which is what Swift's structured concurrency does there, and what `coroutineScope` does here.
+ */
+private suspend fun fetchTranslation(
+    translate: Remote<TranslateParams, String>,
+    title: String,
+    description: String,
+    target: String,
+): Translation =
+    coroutineScope {
+        val translatedDescription =
+            async { translate.load(TranslateParams(text = description, target = target)) }
+        val translatedTitle =
+            async { translate.load(TranslateParams(text = title, target = target)) }
+        Translation(
+            title = translatedTitle.await(),
+            description = translatedDescription.await(),
+        )
     }
 
 /** iOS `pastVuURL(cid:)`: the public web page for a photo. */

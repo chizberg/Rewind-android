@@ -14,6 +14,7 @@ data class RewindRemotes(
     val annotations: Remote<AnnotationLoadingParams, Pair<List<ModelImage>, List<ModelCluster>>>,
     val imageDetails: Remote<Int, ModelImageDetails>,
     val streetViewAvailability: Remote<Coordinate, StreetViewAvailability>,
+    val translate: Remote<TranslateParams, String>,
 ) {
     companion object
 }
@@ -24,6 +25,16 @@ data class AnnotationLoadingParams(
     val coordinates: List<List<Double>>,
     val startAt: Double,
     val filters: ImageRequestFilters,
+)
+
+/**
+ * Text + target language for one Cloud Translation call. Port of iOS `TranslateParams`, which sits
+ * in this very file there. Re-exported into the details feature (see its `TranslateParams` alias):
+ * the image-details reducer is the only caller, and its signature reads as iOS's does.
+ */
+data class TranslateParams(
+    val text: String,
+    val target: String,
 )
 
 /**
@@ -54,16 +65,22 @@ operator fun RewindRemotes.Companion.invoke(requestPerformer: RequestPerformer):
         Remote<Int, ModelImageDetails> { cid ->
             ModelImageDetails(requestPerformer.perform(Request.imageDetails(cid)))
         }.exponentialBackoff()
-    // No `exponentialBackoff()` here, exactly as on iOS: the two PastVu remotes above are wrapped,
-    // this one and M15's translate are not. A retried metadata lookup would only delay the
-    // "unavailable" alert the comparison screen is waiting on.
+    // No `exponentialBackoff()` on either Google remote, exactly as on iOS: the two PastVu remotes
+    // above are wrapped, these two are not. A retried metadata lookup would only delay the
+    // "unavailable" alert the comparison screen is waiting on, and a retried translation would
+    // likewise sit on the "Unable to translate description" alert while the button stays spinning.
     val streetViewAvailability =
         Remote<Coordinate, StreetViewAvailability> { coordinate ->
             requestPerformer.perform(Request.streetViewAvailability(coordinate))
+        }
+    val translate =
+        Remote<TranslateParams, String> { params ->
+            requestPerformer.perform(Request.translate(params))
         }
     return RewindRemotes(
         annotations = annotations,
         imageDetails = imageDetails,
         streetViewAvailability = streetViewAvailability,
+        translate = translate,
     )
 }

@@ -97,4 +97,10 @@
     <string name="comparison_style_card_on_card">Karta ustida karta</string>
     <string name="comparison_zoom_in">Kattalashtirish</string>
     <string name="comparison_zoom_out">Kichraytirish</string>
+
+    <!-- M15: description translation -->
+    <string name="translate">Tarjima qilish</string>
+    <string name="show_original">Asl nusxani ko\'rsatish</string>
+    <!-- The language code of this folder, not a word to translate — see values/strings.xml. -->
+    <string name="app_language">uz</string>
 </resources>

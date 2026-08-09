@@ -98,4 +98,12 @@
     <string name="comparison_style_card_on_card">Card on card</string>
     <string name="comparison_zoom_in">Zoom in</string>
     <string name="comparison_zoom_out">Zoom out</string>
+
+    <!-- M15: description translation -->
+    <string name="translate">Translate</string>
+    <string name="show_original">Show Original</string>
+    <!-- Not shown anywhere: the language code of THIS values-* folder, i.e. the language the app is
+         actually being read in (iOS Bundle.main.preferredLocalizations.first). Translators: put the
+         code of your own folder here, never a translation of the word. -->
+    <string name="app_language">en</string>
 </resources>
