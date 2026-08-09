@@ -85,6 +85,64 @@ class ImageDetailsModelTest {
             assertNull(model.state.value.anotherImageModel)
             assertTrue(harness.requestedCids.isEmpty())
         }
+
+    /**
+     * Mirror of iOS `repeatedTranslateAfterShowingOriginalReusesCachedResult`.
+     *
+     * A successful translation is cached for the life of the screen: returning to the original
+     * text and translating again reuses the cached result synchronously, without a second round
+     * trip to the remote — translate only calls the network once per screen no matter how many
+     * times the user toggles translate/original.
+     */
+    @Test
+    fun repeatedTranslateAfterShowingOriginalReusesCachedResult() =
+        reducerTest { scope ->
+            val imageTitle = "Vulica Kastryčnickaja"
+            val description = "Вулица Кастрычницкая"
+            val harness = Harness(scope)
+            var translateCallCount = 0
+            val model =
+                harness.makeModel(
+                    imageTitle = imageTitle,
+                    detailsDescription = description,
+                    translate =
+                        Remote { params ->
+                            translateCallCount++
+                            "[xx] " + params.text
+                        },
+                )
+
+            // Seed state.details (and its description) the way the screen normally would before
+            // translate is ever offered.
+            model(ImageDetailsAction.WillBePresented)
+            advanceUntilIdle()
+
+            model(ImageDetailsAction.Translate)
+            // flips synchronously, before the network responds
+            assertEquals(TranslationState.Translating, model.state.value.translationState)
+
+            advanceUntilIdle()
+
+            val firstTranslationState = model.state.value.translationState
+            check(firstTranslationState is TranslationState.Translated) {
+                "expected Translated after the first translate, was $firstTranslationState"
+            }
+            val firstTranslation = firstTranslationState.translation
+            assertEquals(2, translateCallCount) // title + description, requested concurrently
+            assertEquals("[xx] $imageTitle", firstTranslation.title)
+            assertEquals("[xx] $description", firstTranslation.description)
+
+            model(ImageDetailsAction.ShowTranslationOriginal)
+            assertEquals(TranslationState.Available, model.state.value.translationState)
+
+            model(ImageDetailsAction.Translate)
+            // cache hit: synchronous, no scheduler pump needed to observe the result
+            assertEquals(
+                TranslationState.Translated(firstTranslation),
+                model.state.value.translationState,
+            )
+            assertEquals(2, translateCallCount) // no new network calls
+        }
 }
 
 private class Harness(
@@ -93,13 +151,27 @@ private class Harness(
     val openedUrls = mutableListOf<String>()
     val requestedCids = mutableListOf<Int>()
 
-    fun makeModel(): ImageDetailsModel =
+    /**
+     * [imageTitle]/[detailsDescription] default to the pre-M15 fixtures (empty title, no
+     * description) so the three link-routing tests above are unaffected; the M15 translate test
+     * supplies its own distinguishable, non-empty strings so a title/description slot swap in the
+     * translation result is unmistakable. [translate] stands where the iOS Harness keeps its
+     * `.mock("translated")` default, but poisoned: a test that dispatches `.Translate` is expected
+     * to supply its own stub, and an accidental call should fail loudly rather than pass through a
+     * value nobody chose.
+     */
+    fun makeModel(
+        imageTitle: String = "",
+        detailsDescription: String? = null,
+        translate: Remote<TranslateParams, String> =
+            Remote { TODO("this test dispatched .Translate without supplying a translate stub") },
+    ): ImageDetailsModel =
         makeImageDetailsModel(
-            modelImage = mockImage(cid = 1),
+            modelImage = mockImage(cid = 1, title = imageTitle),
             remote =
                 Remote { cid ->
                     requestedCids += cid
-                    mockDetails(cid)
+                    mockDetails(cid, description = detailsDescription)
                 },
             openSource = "",
             isFavorite = { false },
@@ -109,29 +181,36 @@ private class Harness(
             urlOpener = { openedUrls += it },
             saveImage = {},
             shareImage = {},
+            translate = translate,
             extractModelImage = { details -> mockImage(cid = details.cid) },
             scope = scope,
         )
 }
 
-private fun mockImage(cid: Int): ModelImage =
+private fun mockImage(
+    cid: Int,
+    title: String = "",
+): ModelImage =
     ModelImage(
         cid = cid,
         imagePath = "",
-        title = "",
+        title = title,
         dir = null,
         coordinate = Coordinate(latitude = 0.0, longitude = 0.0),
         date = ImageDate(year = 1900, year2 = 1900),
     )
 
-private fun mockDetails(cid: Int): ModelImageDetails =
+private fun mockDetails(
+    cid: Int,
+    description: String? = null,
+): ModelImageDetails =
     ModelImageDetails(
         cid = cid,
         title = "",
         direction = null,
         coordinate = Coordinate(latitude = 0.0, longitude = 0.0),
         date = ImageDate(year = 1900, year2 = 1900),
-        description = null,
+        description = description,
         source = null,
         address = null,
         author = null,

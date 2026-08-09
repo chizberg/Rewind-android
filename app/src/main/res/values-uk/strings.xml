@@ -97,4 +97,10 @@
     <string name="comparison_style_card_on_card">Картка на картці</string>
     <string name="comparison_zoom_in">Наблизити</string>
     <string name="comparison_zoom_out">Віддалити</string>
+
+    <!-- M15: description translation -->
+    <string name="translate">Перекласти</string>
+    <string name="show_original">Показати оригінал</string>
+    <!-- The language code of this folder, not a word to translate — see values/strings.xml. -->
+    <string name="app_language">uk</string>
 </resources>

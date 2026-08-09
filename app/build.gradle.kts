@@ -116,6 +116,10 @@ dependencies {
     implementation(libs.androidx.camera.camera2)
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
+    // M15: which language a description is written in — the on-device counterpart of iOS's
+    // NLLanguageRecognizer. The model ships inside the artifact (no Play Services download), so
+    // detection works offline; the translation itself is the Cloud Translation REST call.
+    implementation(libs.mlkit.language.id)
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
     // The full-screen photo viewer (M9's "telephoto or hand-rolled" call): pan bounded to the

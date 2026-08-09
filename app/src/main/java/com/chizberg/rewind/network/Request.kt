@@ -15,6 +15,8 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Request as OkHttpRequest
 
 /**
@@ -31,9 +33,15 @@ class Request<Response>(
 
 private const val PASTVU_API = "https://api.pastvu.com/api2"
 
-/** Google's REST host — Street View metadata now, Cloud Translation in M15 (key B, see
+/** Google's REST host for the Street View metadata lookup (key B, see
  *  `secrets.defaults.properties`). */
 private const val GOOGLE_MAPS_API = "https://maps.googleapis.com/maps/api"
+
+/** Cloud Translation v2 — the other half of key B. A host of its own, as on iOS. Public because
+ *  the app layer tags requests to exactly this host with its Android-client headers (see
+ *  `AndroidClientInterceptor`). */
+const val TRANSLATION_API_HOST = "translation.googleapis.com"
+private const val TRANSLATION_API = "https://$TRANSLATION_API_HOST/language/translate/v2"
 
 private fun isLocalWork(zoom: Int): Boolean = zoom >= 17
 
@@ -179,6 +187,70 @@ private fun extractYear(date: String?): Int {
             ?.takeIf { piece -> piece.all { it.isDigit() } }
             ?.toIntOrNull()
     return year ?: throw NetworkError.ParsingFailure(desc = "Invalid date format: $date")
+}
+
+/**
+ * Cloud Translation v2 — one string into one language. Port of iOS `Network.translate(params:)`.
+ * See https://docs.cloud.google.com/translate/docs/reference/rest/v2/translate
+ *
+ * The first POST in this file, hence the hand-built JSON body (the other three are GETs with query
+ * parameters). `Content-Type: application/json; charset=utf-8` rides on the body's media type,
+ * which is what iOS sets by hand.
+ *
+ * The quirk to keep: [TranslateParams.text] is a PastVu *description*, i.e. raw HTML, and it is
+ * still announced as `format: "text"` — verbatim from iOS. Google therefore escapes the markup
+ * rather than translating around it, and the answer goes back through the same HTML parser the
+ * original does. Not a bug to fix here: the rendered result is what both apps ship.
+ */
+fun Request.Companion.translate(params: TranslateParams): Request<String> =
+    Request(
+        makeRequest = {
+            val url =
+                TRANSLATION_API
+                    .toHttpUrl()
+                    .newBuilder()
+                    .addQueryParameter("key", BuildConfig.GOOGLE_REST_API_KEY)
+                    .build()
+            val body = TranslateBody(q = params.text, target = params.target)
+            OkHttpRequest
+                .Builder()
+                .url(url)
+                .post(paramsJson.encodeToString(body).toRequestBody(JSON_MEDIA_TYPE))
+                .build()
+        },
+        parseResult = { bytes ->
+            val response =
+                networkJson.decodeFromString<TranslateResponse>(bytes.decodeToString())
+            response.data.translations
+                .firstOrNull()
+                ?.translatedText
+                ?: throw NetworkError.ParsingFailure(desc = "No translations found")
+        },
+    )
+
+private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
+
+@Serializable
+private data class TranslateBody(
+    val q: String,
+    val target: String,
+    /** Announced regardless of the HTML actually travelling in [q] — see the factory's comment. */
+    val format: String = "text",
+)
+
+@Serializable
+private data class TranslateResponse(
+    val data: Data,
+) {
+    @Serializable
+    data class Data(
+        val translations: List<Translation>,
+    )
+
+    @Serializable
+    data class Translation(
+        val translatedText: String,
+    )
 }
 
 /** `photo.giveForPage`. Port of iOS `Network.imageDetails`. */

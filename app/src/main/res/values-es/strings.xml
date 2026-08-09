@@ -97,4 +97,10 @@
     <string name="comparison_style_card_on_card">Tarjeta sobre tarjeta</string>
     <string name="comparison_zoom_in">Acercar</string>
     <string name="comparison_zoom_out">Alejar</string>
+
+    <!-- M15: description translation -->
+    <string name="translate">Traducir</string>
+    <string name="show_original">Mostrar original</string>
+    <!-- The language code of this folder, not a word to translate — see values/strings.xml. -->
+    <string name="app_language">es</string>
 </resources>
