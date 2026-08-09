@@ -26,3 +26,10 @@ jobs:
 
       - name: Run unit tests and Android lint
         run: ./gradlew testDebugUnitTest lint --stacktrace
+
+      # The steps above compile debug sources and lint the debug variant, but never package
+      # anything: a broken manifest merge, a resource that only fails at link time, or (once M16
+      # turns R8 on) a missing keep rule would all reach main green. assembleRelease is the variant
+      # that ships, and AGP hangs lintVitalRelease off it, so the fatal-severity checks come along.
+      - name: Assemble release APK
+        run: ./gradlew assembleRelease --stacktrace
