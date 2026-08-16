@@ -315,8 +315,17 @@ fun RewindMap(
     // The target LatLng never changes — only where the SDK draws it — so this recentres the map the
     // way MapKit's animated `layoutMargins` does, and the region change it produces is the honest
     // one (the visible area really did grow).
+    //
+    // Watches the padding's BOTH inputs, not just the fold spring: `controlsHeight` moves on its
+    // own when the year selector unfolds (or the strip's inset changes), and a nudge-less padding
+    // change is exactly the tear described above — the overlay re-centres immediately while the
+    // base map sits on its last-drawn frame, so every marker slides by half the height delta until
+    // the next camera move. (Reproduced on device: opening the selector walked markers ~70px off
+    // the map.) The expression must live inside snapshotFlow — `mapBottomPadding` itself is a
+    // plain local recomputed per composition, reading it here would capture one stale value and
+    // never re-fire.
     LaunchedEffect(cameraPositionState) {
-        snapshotFlow { insetOffset }
+        snapshotFlow { controlsHeight - with(localDensity) { insetOffset.toDp() } }
             .drop(1)
             .collect {
                 cameraPositionState.move(
