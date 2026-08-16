@@ -60,6 +60,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.serialization.builtins.serializer
 import okhttp3.OkHttpClient
 import java.io.File
 
@@ -159,6 +160,19 @@ class AppGraph(
             }
         }
 
+    /** A single persisted counter, iOS `storage.makeCodableField(key:default: 0)`. */
+    private fun intPreference(key: String): Property<Int> {
+        val preference =
+            JsonPreference(
+                dataStore = dataStore,
+                key = key,
+                serializer = Int.serializer(),
+                defaultValue = 0,
+                scope = scope,
+            )
+        return Property(getter = { preference.value }, setter = { preference.value = it })
+    }
+
     private val favoritesStorage = FavoritesStorage(dataStore, scope)
 
     /** The single favorites reducer, shared by every image-details screen (the star) and the app
@@ -206,6 +220,28 @@ class AppGraph(
             getter = { settings.value.sorting },
             setter = { newSorting -> settings.value = settings.value.copy(sorting = newSorting) },
         )
+
+    // The two review counters, each under iOS's own UserDefaults key and each its own entry (iOS
+    // keeps two `makeCodableField`s too, rather than one blob like settings/onboarding).
+    private val launchCount = intPreference("launchCount")
+    private val requestCount = intPreference("requestCount")
+
+    private val reviewPromptRequestsMutable = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    /** Rings when the counters say it is time to ask; [ReviewPromptHost] answers it. */
+    val reviewPromptRequests: SharedFlow<Unit> = reviewPromptRequestsMutable
+
+    private val reviewPrompter =
+        ReviewPrompter(
+            launchCount = launchCount,
+            requestCount = requestCount,
+            // Play needs an Activity — see ReviewPromptHost, and M13.5's location permission for
+            // the same shape.
+            showPrompt = { reviewPromptRequestsMutable.tryEmit(Unit) },
+        )
+
+    /** Plays the taps iOS fires inline from its reducers; [HapticsHost] lends it a view. */
+    val haptics = AndroidHaptics()
 
     // The first-run flag, its own blob under iOS's "onboarding" key (not a field of SettingsState).
     private val onboardingStorage =
@@ -282,6 +318,7 @@ class AppGraph(
                     cameraSession = cameraSession,
                     renderer = renderer,
                     orientation = deviceOrientation(appContext),
+                    haptics = haptics,
                     saveImage = { captured ->
                         imageExport.save(captured.bitmap(), comparisonFileName(image.cid))
                     },
@@ -336,6 +373,7 @@ class AppGraph(
             setOrientationLock = { orientationLockMutable.value = it },
             translate = remotes.translate,
             detectLanguage = languageDetector,
+            haptics = haptics,
             // iOS reads `Bundle.main.preferredLocalizations.first` — the localization the *bundle*
             // picked, already matched against the ones it ships. `Locale.getDefault().language` is
             // not that: on a Japanese phone it answers "ja" while every string on screen is the
@@ -380,9 +418,7 @@ class AppGraph(
             // map (tint scheme, cluster previews) through `init`'s subscriptions.
             settings = settings,
             urlOpener = urlOpener,
-            // iOS plays a selection haptic on a scheme change, inline in its reducer; there is no
-            // haptics facade in this port yet (M16), so the call site takes a no-op for now.
-            selectionHaptic = {},
+            haptics = haptics,
             scope = scope,
         )
     }
@@ -417,12 +453,18 @@ class AppGraph(
             onboardingModel = onboardingModel,
             currentRegionImages = { mapModel.state.value.currentRegionImages },
             sorting = imageSorting,
-            requestReview = {}, // Play In-App Review lands in M16.
+            requestReview = { reviewPrompter.request() },
             initialGradientScheme = settings.value.gradientScheme,
             scope = scope,
         )
 
     init {
+        // Port of iOS `AppGraph.init`'s last line, and it lands in the same place for the same
+        // reason: the graph is built once per process. `RewindViewModel` holds it across activity
+        // recreation, so a rotation — or any other configuration change — is not a launch. (An
+        // activity that genuinely finishes would clear the ViewModel and count one more launch, but
+        // back on the map minimises the task instead of finishing; see MainActivity.)
+        reviewPrompter.appLaunched()
         // Port of iOS `AppGraph`: `settings.sorting.onChange { mapModel(.internal(.updatePreviews)) }`.
         // A sort change made in a list's menu writes [imageSorting]; the map shares that order, so
         // its previews re-sort immediately instead of waiting for the next region change. `drop(1)`

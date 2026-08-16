@@ -4,6 +4,7 @@ import com.chizberg.rewind.app.AlertParams
 import com.chizberg.rewind.app.errorAlert
 import com.chizberg.rewind.core.redux.AsyncEffect
 import com.chizberg.rewind.core.redux.Reducer
+import com.chizberg.rewind.core.util.Haptics
 import com.chizberg.rewind.core.util.OrientationLock
 import com.chizberg.rewind.domain.Coordinate
 import com.chizberg.rewind.domain.ModelImage
@@ -297,6 +298,7 @@ fun makeImageDetailsModel(
     // shows the button (a reducer test) needs no ML Kit. The graph always passes the real one.
     detectLanguage: LanguageDetector = LanguageDetector { null },
     appLanguage: String = DEFAULT_APP_LANGUAGE,
+    haptics: Haptics = Haptics.None,
     extractModelImage: (ModelImageDetails) -> ModelImage,
     scope: CoroutineScope,
 ): ImageDetailsModel =
@@ -374,7 +376,14 @@ fun makeImageDetailsModel(
                 when (action.button) {
                     ImageDetailsAction.Button.Favorite -> {
                         val next = !state.isFavorite
-                        asyncEffect(AsyncEffect.perform { setFavorite(modelImage, next) })
+                        // The tap is acknowledged after the write, inside the same effect iOS puts
+                        // its `impactOccurred()` in — not before it.
+                        asyncEffect(
+                            AsyncEffect.perform {
+                                setFavorite(modelImage, next)
+                                haptics.impactLight()
+                            },
+                        )
                         state.copy(isFavorite = next)
                     }
 
@@ -462,8 +471,13 @@ fun makeImageDetailsModel(
                         modelImage.coordinate.latitude,
                         modelImage.coordinate.longitude,
                     )
-                if (canOpenUrl(link)) effect { urlOpener(link) }
-                // iOS fires an error haptic when no app can open the link; that lands in the UI.
+                // Nothing on screen says the route failed — the buzz is the whole feedback, as on
+                // iOS. See the manifest's `<queries>`: without it every link looks unopenable.
+                if (canOpenUrl(link)) {
+                    effect { urlOpener(link) }
+                } else {
+                    effect { haptics.error() }
+                }
                 state
             }
 
@@ -600,9 +614,10 @@ fun makeImageDetailsModel(
                 state
             }
 
-            // iOS also fires a success haptic here; ours plays it in the view, where the haptic
-            // feedback handle lives.
-            ImageDetailsAction.Internal.ImageSaved -> state.copy(isImageSaved = true)
+            ImageDetailsAction.Internal.ImageSaved -> {
+                effect { haptics.success() }
+                state.copy(isImageSaved = true)
+            }
 
             // Port of iOS `apply(details:to:)`, split in two because the detector is asynchronous
             // here: the payload lands now, the translation verdict in

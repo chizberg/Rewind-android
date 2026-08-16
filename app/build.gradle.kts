@@ -120,6 +120,10 @@ dependencies {
     // NLLanguageRecognizer. The model ships inside the artifact (no Play Services download), so
     // detection works offline; the translation itself is the Cloud Translation REST call.
     implementation(libs.mlkit.language.id)
+    // M16: the in-app review prompt — Play's counterpart of iOS `AppStore.requestReview(in:)`.
+    // Play throttles and may silently drop the flow; the app never learns whether anything was
+    // shown, exactly as StoreKit never tells iOS either.
+    implementation(libs.play.review.ktx)
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
     // The full-screen photo viewer (M9's "telephoto or hand-rolled" call): pan bounded to the
