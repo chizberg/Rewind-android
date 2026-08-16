@@ -39,6 +39,27 @@ private const val ANIM_DURATION_MS = 200
 private val EaseInOutCubic = CubicBezierEasing(0.42f, 0f, 0.58f, 1f)
 
 /**
+ * At most this many NEW entries join the composition per frame. iOS composes a whole wave at once
+ * (UIKit view churn is cheaper than a wave of Compose node creation); here the M16 perf pass
+ * measured a wave landing as one 10–15ms animation phase — composition of every new marker in a
+ * single frame — on an 8.3ms (120Hz) budget. Traced on-device: one admitted change costs ~0.25ms
+ * of Recomposer/applyChanges, so eight additions plus sixteen updates stay near ~6ms worst-case; entries appear over a few frames instead, invisible behind the 0.01-scale pop-in start.
+ * Exit starts stay immediate — they compose nothing new.
+ */
+private const val ADDITIONS_PER_FRAME = 8
+
+/**
+ * At most this many CHANGED values commit per frame. A zoom-level change rewrites nearly every
+ * cluster's count/preview at once, and the resulting recomposition wave showed up in the M16 perf
+ * pass as 9–18ms of `Compose:applyChanges` in one frame — the additions cap alone did not bound
+ * it. Value recompositions reuse nodes (no graphicsLayer/node creation), so the per-frame cap is
+ * looser than [ADDITIONS_PER_FRAME]; a stale badge for the 1–4 frames a big wave takes to drain
+ * is invisible. Values that compare equal skip the write entirely — Compose would not invalidate
+ * on them anyway, so they must not spend budget.
+ */
+private const val UPDATES_PER_FRAME = 16
+
+/**
  * One tracked annotation view: its stable [key], the latest model, and its enter/exit animation
  * state. Only [value] and [animating] are snapshot state (composition reads the former, draw
  * gates on the latter); the rest are plain fields touched solely on the main thread by the
@@ -112,6 +133,8 @@ internal fun rememberAnnotationPresence(
 ): AnnotationPresence {
     val presence = remember { AnnotationPresence() }
     LaunchedEffect(annotations) {
+        val added = mutableListOf<PresenceEntry>()
+        val updated = mutableListOf<Pair<PresenceEntry, AnnotationValue>>()
         trace("Rewind:reconcile") {
             val entries = presence.entries
             val now = presence.frameTimeMs.longValue
@@ -119,14 +142,16 @@ internal fun rememberAnnotationPresence(
             val existingByKey = entries.associateBy { it.key }
             incoming.forEach { (key, value) ->
                 val existing = existingByKey[key]
-                if (existing == null) {
-                    entries.add(PresenceEntry(key, value))
-                } else {
-                    existing.value = value
-                    if (existing.exiting) {
+                when {
+                    existing == null -> added += PresenceEntry(key, value)
+                    existing.exiting -> {
+                        // Rare reversal (key came back mid-shrink) — cheap, applied immediately
+                        // so the regrow starts this frame, not whenever the queue drains.
+                        existing.value = value
                         existing.exiting = false
                         existing.animateTo(1f, now)
                     }
+                    existing.value != value -> updated += existing to value
                 }
             }
             val dropped = mutableListOf<PresenceEntry>()
@@ -142,6 +167,26 @@ internal fun rememberAnnotationPresence(
                 }
             }
             entries.removeAll(dropped)
+        }
+        // Admission: new entries and changed values drain over frames, capped per frame (see the
+        // constants' KDocs). If a new list lands mid-drain this effect is cancelled and restarted:
+        // not-yet-admitted keys count as "new"/"changed" again in the next reconcile — nothing is
+        // lost, and the next wave's values supersede the stale queue.
+        var addedIndex = 0
+        var updatedIndex = 0
+        while (addedIndex < added.size || updatedIndex < updated.size) {
+            val updatedEnd = minOf(updatedIndex + UPDATES_PER_FRAME, updated.size)
+            while (updatedIndex < updatedEnd) {
+                val (entry, value) = updated[updatedIndex]
+                entry.value = value
+                updatedIndex++
+            }
+            val addedEnd = minOf(addedIndex + ADDITIONS_PER_FRAME, added.size)
+            if (addedIndex < addedEnd) {
+                presence.entries.addAll(added.subList(addedIndex, addedEnd))
+                addedIndex = addedEnd
+            }
+            if (addedIndex < added.size || updatedIndex < updated.size) withFrameMillis {}
         }
     }
     LaunchedEffect(presence) {

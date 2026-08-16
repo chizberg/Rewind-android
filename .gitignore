@@ -41,3 +41,7 @@ Thumbs.db
 .claude/
 CLAUDE.md
 CLAUDE.local.md
+
+# Perf measurement artifacts (tools/perf/measure.sh output)
+tools/perf/framestats-*.txt
+tools/perf/trace-*.txt

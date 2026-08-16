@@ -28,8 +28,13 @@ android {
 
     buildTypes {
         release {
+            // R8 on (the AGP 9 template ships this off — that was never a decision, just the
+            // default). Measured on-device before/after in .claude/perf-plan.md: the unoptimized
+            // cold start spent ~250ms of its 485ms first frame in class loading/JIT. App keep
+            // rules live in src/main/keepRules/ (the AGP 9 source-folder convention); libraries
+            // bring their own consumer rules.
             optimization {
-                enable = false
+                enable = true
             }
         }
     }

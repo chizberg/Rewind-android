@@ -96,6 +96,13 @@ class AppGraph(
         ImageLoader
             .Builder(appContext)
             .components { add(OkHttpNetworkFetcherFactory()) }
+            // Two concurrent decodes instead of Coil's unbounded Default-dispatcher use. Preview
+            // decodes are 17–34ms each and arrive in bursts exactly when a wave of annotations is
+            // composing; traced on-device (M16 perf pass), the burst kept every big core busy
+            // (~120ms of DefaultDispatcher work across one frame) while the main thread sat
+            // runnable behind it. Capping decodes at two leaves a big core free for the frame; the
+            // decodes themselves just queue a little longer — invisible next to network latency.
+            .decoderCoroutineContext(Dispatchers.Default.limitedParallelism(2))
             .build()
 
     private val remotes =
