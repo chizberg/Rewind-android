@@ -562,11 +562,57 @@ class MapModelTest {
             assertEquals(second, model.state.value.locationState.location)
         }
 
-    @Ignore("map controls minimization not ported yet")
+    /**
+     * A drag of the map that reaches the controls' band folds them away, and they unfold on their
+     * own after the 2s debounce; once the user has folded them by hand, a drag must neither refold
+     * them nor re-arm that unfold. Mirrors iOS
+     * `MapModelTests.dragMinimizesControlsAndAutoUnfoldsUnlessUserMinimized`
+     * (`MapModelTests.swift:216-233`).
+     *
+     * Shape differs from iOS in one place: there the band's height is the static
+     * `mapControlsTouchBlockingHeight`, here it is the strip's measured height, so the view has to
+     * report it before any drag means anything (see `MapState.ControlsState.heightDp`).
+     */
     @Test
-    fun dragMinimizesControlsAndAutoUnfoldsUnlessUserMinimized() {
-        TODO("mirror iOS once the controls minimization/unfold land")
-    }
+    fun dragMinimizesControlsAndAutoUnfoldsUnlessUserMinimized() =
+        reducerTest { scope ->
+            val model =
+                makeMapModel(
+                    FakeAnnotationsRemote().asRemote,
+                    onLoadFailed = {},
+                    scope = scope,
+                    now = { 0.0 },
+                )
+            assertEquals(Minimization.Normal, model.state.value.controls.minimization)
+
+            val viewportHeight = 800f
+            val stripHeight = 230f
+            model(
+                MapAction.External.Ui.Controls
+                    .SizeChanged(stripHeight),
+            )
+
+            val insideBand = viewportHeight - stripHeight + 1f
+            model(MapAction.External.Map.UserDragged(insideBand, viewportHeight))
+            assertEquals(
+                Minimization.Minimized(byUser = false),
+                model.state.value.controls.minimization,
+            )
+
+            advanceTimeBy(2500.milliseconds)
+            assertEquals(Minimization.Normal, model.state.value.controls.minimization)
+
+            model(
+                MapAction.External.Ui.Controls
+                    .SetMinimization(Minimization.Minimized(byUser = true)),
+            )
+            model(MapAction.External.Map.UserDragged(insideBand, viewportHeight))
+            advanceTimeBy(2300.milliseconds)
+            assertEquals(
+                Minimization.Minimized(byUser = true),
+                model.state.value.controls.minimization,
+            )
+        }
 
     @Ignore("focusOn action not ported yet")
     @Test

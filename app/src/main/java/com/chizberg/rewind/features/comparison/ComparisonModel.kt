@@ -5,6 +5,7 @@ import com.chizberg.rewind.app.errorAlert
 import com.chizberg.rewind.app.infoAlert
 import com.chizberg.rewind.core.redux.AsyncEffect
 import com.chizberg.rewind.core.redux.Reducer
+import com.chizberg.rewind.core.util.Haptics
 import com.chizberg.rewind.domain.ModelImage
 import com.chizberg.rewind.domain.StreetViewAvailability
 import com.chizberg.rewind.features.details.pastVuUrl
@@ -220,6 +221,7 @@ fun makeComparisonModel(
     orientation: Flow<Orientation>,
     saveImage: CaptureSaver,
     shareImage: CaptureSharer,
+    haptics: Haptics = Haptics.None,
     scope: CoroutineScope,
 ): ComparisonModel =
     Reducer<ComparisonState, ComparisonAction>(
@@ -231,8 +233,9 @@ fun makeComparisonModel(
 
             ComparisonAction.External.Shoot -> {
                 // The counter goes up before anything is captured: it drives the blink, which
-                // acknowledges the *tap* (iOS fires its success haptic in the same spot; ours is
-                // played by the view, which owns the haptic handle — as with M9's save).
+                // acknowledges the *tap* — and so does the haptic beside it, fired here exactly
+                // where iOS fires its own, before the capture that may still fail.
+                effect { haptics.success() }
                 val mode = state.captureMode
                 val hasViewfinder =
                     state.captureState is ComparisonState.CaptureState.Viewfinder

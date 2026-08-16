@@ -28,8 +28,13 @@ android {
 
     buildTypes {
         release {
+            // R8 on (the AGP 9 template ships this off — that was never a decision, just the
+            // default). Measured on-device before/after in .claude/perf-plan.md: the unoptimized
+            // cold start spent ~250ms of its 485ms first frame in class loading/JIT. App keep
+            // rules live in src/main/keepRules/ (the AGP 9 source-folder convention); libraries
+            // bring their own consumer rules.
             optimization {
-                enable = false
+                enable = true
             }
         }
     }
@@ -120,6 +125,10 @@ dependencies {
     // NLLanguageRecognizer. The model ships inside the artifact (no Play Services download), so
     // detection works offline; the translation itself is the Cloud Translation REST call.
     implementation(libs.mlkit.language.id)
+    // M16: the in-app review prompt — Play's counterpart of iOS `AppStore.requestReview(in:)`.
+    // Play throttles and may silently drop the flow; the app never learns whether anything was
+    // shown, exactly as StoreKit never tells iOS either.
+    implementation(libs.play.review.ktx)
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
     // The full-screen photo viewer (M9's "telephoto or hand-rolled" call): pan bounded to the
