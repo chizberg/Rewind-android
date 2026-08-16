@@ -104,6 +104,44 @@ fun makeMapModel(
             is MapAction.External.Ui.Controls.SetExpandedItems ->
                 state.copy(controls = state.controls.copy(expandedItems = action.items))
 
+            is MapAction.External.Ui.Controls.SetMinimization ->
+                state.copy(controls = state.controls.copy(minimization = action.minimization))
+
+            is MapAction.External.Ui.Controls.SizeChanged ->
+                state.copy(controls = state.controls.copy(heightDp = action.heightDp))
+
+            // A pan of the map that reaches the band the controls occupy folds them away, so the
+            // finger is not dragging the map through an opaque strip; they come back on their own
+            // 2s after the gesture leaves. Every movement inside the band re-arms that debounce
+            // (iOS's `handlePan` fires on each callback too), so the countdown starts from the last
+            // moment the finger was down there.
+            is MapAction.External.Map.UserDragged ->
+                when {
+                    // Folded by hand, so leave it folded: cancel any pending unfold rather than
+                    // undoing what the user just did (iOS's guard, same order).
+                    state.controls.minimization.isMinimizedByUser -> {
+                        asyncEffect(AsyncEffect.cancel(DebouncedActionId.UnfoldControlsBack))
+                        state
+                    }
+
+                    action.touchY > action.viewportHeight - state.controls.heightDp -> {
+                        asyncEffect(
+                            AsyncEffect.debounced(
+                                id = DebouncedActionId.UnfoldControlsBack,
+                                anotherAction = MapAction.Internal.UnfoldMapControlsBack,
+                            ),
+                        )
+                        state.copy(
+                            controls =
+                                state.controls.copy(
+                                    minimization = Minimization.Minimized(byUser = false),
+                                ),
+                        )
+                    }
+
+                    else -> state
+                }
+
             MapAction.External.Ui.MapViewLoaded -> {
                 effect {
                     locationModel(LocationAction.RequestAccess)
@@ -223,6 +261,9 @@ fun makeMapModel(
                     state.copy(currentRegionImages = images, previews = makePreviews(images))
                 }
             }
+
+            MapAction.Internal.UnfoldMapControlsBack ->
+                state.copy(controls = state.controls.copy(minimization = Minimization.Normal))
 
             MapAction.Internal.ClearAnnotations -> {
                 // Debounced with the same id as regionChanged's updatePreviews, so a clear followed

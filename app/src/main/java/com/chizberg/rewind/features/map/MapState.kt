@@ -19,6 +19,28 @@ enum class MapControlItem {
 }
 
 /**
+ * How far the floating controls are out of the way. Port of iOS `MinimizationState` (which lives in
+ * `MapControlsHiding.swift`, next to the gesture that writes it; here the state is JVM-only, so it
+ * sits with the rest of the map's state and the gesture stays in `RewindMap`).
+ *
+ * [Minimized.byUser] is what keeps the two drivers from fighting: a drag of the *map* into the
+ * controls' band minimizes them automatically and re-arms a 2s unfold, but once the user has
+ * minimized them *themselves* (by dragging the strip down) the automatic driver stops touching
+ * them — they stay put until dragged or tapped back.
+ */
+sealed interface Minimization {
+    data object Normal : Minimization
+
+    data class Minimized(
+        val byUser: Boolean = false,
+    ) : Minimization
+
+    val isMinimized: Boolean get() = this is Minimized
+
+    val isMinimizedByUser: Boolean get() = this is Minimized && byUser
+}
+
+/**
  * The map screen's state. Port of iOS `MapState`.
  *
  * Divergence from iOS: carries [zoom] explicitly. iOS reconstructs zoom from the region span via
@@ -56,11 +78,21 @@ data class MapState(
     val locationState: LocationState = LocationState(),
 ) {
     /**
-     * The floating controls' view state. Port of iOS `MapState.ControlsState`, trimmed to the
-     * expansion set; `minimization` (drag-to-hide) and `size` arrive with their milestones.
+     * The floating controls' view state. Port of iOS `MapState.ControlsState`.
+     *
+     * [heightDp] is iOS's `size`, narrowed to the one dimension anything reads (iOS passes the whole
+     * `CGSize` but only ever uses `height`). It is the strip's measured height in dp, reported by
+     * the view, and it stands in for iOS's static `mapControlsTouchBlockingHeight`: our strip's
+     * height is not a constant — it carries the navigation-bar inset and grows when the year
+     * selector expands — so the band the controls occupy has to be measured rather than declared.
+     *
+     * The pull-up-to-open-the-list driver of `minimization` is not ported: that job is done by the
+     * strip's trailing "view as list" card, which iOS shows as well.
      */
     data class ControlsState(
         val expandedItems: Set<MapControlItem> = emptySet(),
+        val minimization: Minimization = Minimization.Normal,
+        val heightDp: Float = 0f,
     )
 
     /**

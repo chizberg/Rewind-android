@@ -26,6 +26,19 @@ sealed interface MapAction {
                 val zoom: Int,
                 val cameraZoom: Float,
             ) : Map
+
+            /**
+             * The finger moved while panning the map (iOS `userDragged(CGPoint, CGRect)`, fed by a
+             * `UIPanGestureRecognizer` on the map view itself; here by an observing `pointerInput`
+             * around the map — see `RewindMap`). Both values are in dp, and both are raw: the
+             * reducer, not the view, decides whether the touch is inside the controls' band.
+             *
+             * Fires on every movement of the gesture, exactly as iOS's `handlePan` does.
+             */
+            data class UserDragged(
+                val touchY: Float,
+                val viewportHeight: Float,
+            ) : Map
         }
 
         sealed interface Ui : External {
@@ -48,10 +61,26 @@ sealed interface MapAction {
                 val mapType: MapType,
             ) : Ui
 
-            /** Port of iOS `MapAction.External.UI.controls`, trimmed to the expansion set. */
+            /** Port of iOS `MapAction.External.UI.controls`. */
             sealed interface Controls : Ui {
                 data class SetExpandedItems(
                     val items: Set<MapControlItem>,
+                ) : Controls
+
+                /**
+                 * The user folded or unfolded the controls by hand — dragging the strip down/up, or
+                 * tapping a minimized strip to bring it back (iOS `setMinimization`).
+                 */
+                data class SetMinimization(
+                    val minimization: Minimization,
+                ) : Controls
+
+                /**
+                 * The strip measured itself (iOS `sizeChanged`, which carries the whole `CGSize`;
+                 * only the height is ever read). See `ControlsState.heightDp`.
+                 */
+                data class SizeChanged(
+                    val heightDp: Float,
                 ) : Controls
             }
         }
@@ -85,6 +114,9 @@ sealed interface MapAction {
         ) : Internal
 
         data object UpdatePreviews : Internal
+
+        /** The 2s debounce after an automatic minimize expired (iOS `unfoldMapControlsBack`). */
+        data object UnfoldMapControlsBack : Internal
 
         data object ClearAnnotations : Internal
     }
