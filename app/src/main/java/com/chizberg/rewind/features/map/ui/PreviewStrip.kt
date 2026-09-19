@@ -34,6 +34,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -49,8 +50,13 @@ import com.chizberg.rewind.ui.toComposeColor
  * concentric with the display for free on every device — and only its top corners are rounded. Its
  * background extends behind the navigation bar while the cards are inset above the home indicator.
  * A fixed leading column carries the favorites (star), view-as-list and settings buttons (iOS
- * `MapControls.makeBottomScrollButton`); the drag-minimize gesture lands with its later milestone
- * (M16). Cards are tinted by year via [scheme] over [maxRange] (mirrors the map annotations). */
+ * `MapControls.makeBottomScrollButton`). The strip stays a plain view: the gesture layer that folds
+ * it away (drag-to-minimize, the glimpse it leaves, the auto-minimize under a map drag) lives in
+ * `RewindMap`, as iOS keeps it in the parent `MapControls`. [contentAlpha] is that layer's dimming
+ * of the folded strip — iOS's `content.opacity(0.5)`, applied to the cards and not to the sheet, so
+ * the sheet itself stays opaque. Of the iOS drivers only pull-up-to-open-the-list is not ported: its
+ * job is done by the trailing "view as list" card, which iOS shows as well.
+ * Cards are tinted by year via [scheme] over [maxRange] (mirrors the map annotations). */
 @Composable
 fun PreviewStrip(
     previews: List<PreviewCard>,
@@ -62,6 +68,7 @@ fun PreviewStrip(
     onViewAsListClick: () -> Unit,
     onSettingsClick: () -> Unit,
     modifier: Modifier = Modifier,
+    contentAlpha: () -> Float = { 1f },
 ) {
     Surface(
         // Sideways the sheet stays inside the safe area — in landscape the window now reaches under
@@ -81,7 +88,10 @@ fun PreviewStrip(
         Box(
             Modifier
                 .windowInsetsPadding(WindowInsets.navigationBars)
-                .height(StripContentHeight),
+                .height(StripContentHeight)
+                // Read in the draw phase, not composition: the fold animates it every frame, and
+                // the strip must not recompose (cards, LazyRow and all) on each of them.
+                .graphicsLayer { alpha = contentAlpha() },
         ) {
             val listState = rememberLazyListState()
             // Mirror iOS AutoscrollingScrollView: snap back to the first card whenever the set changes.

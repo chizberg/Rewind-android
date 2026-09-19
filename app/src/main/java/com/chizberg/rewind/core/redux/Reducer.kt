@@ -124,6 +124,8 @@ enum class DebouncedActionId(
     RegionChanged(100.milliseconds),
     UpdatePreviews(100.milliseconds),
     FiltersChanged(100.milliseconds),
+
+    /** How long the auto-minimized map controls stay folded once the finger stops re-arming it. */
     UnfoldControlsBack(2.seconds),
 
     /**

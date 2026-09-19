@@ -84,6 +84,13 @@ fun RootView(modifier: Modifier = Modifier) {
     // request from its AppDelegate, out of the same graph property.
     OrientationLockHost(graph.orientationLock)
 
+    // Play's review card, like the permission dialog, needs an Activity to launch from.
+    ReviewPromptHost(graph.reviewPromptRequests)
+
+    // Lends the graph's haptics facade this composition's view: reducers ask for a tap, the view
+    // plays it (see AndroidHaptics).
+    HapticsHost(graph.haptics)
+
     CompositionLocalProvider(LocalRewindImageLoader provides graph.imageLoader) {
         // The map is the permanent base of the overlay stack: always composed (never a navigation
         // destination, so its MapView is never torn down), receded behind whatever opens over it.

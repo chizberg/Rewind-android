@@ -129,8 +129,8 @@ typealias SettingsModelFactory = () -> SettingsModel
  * - iOS `imageDetails(.dismiss)` also fires `performMapAction(.previewClosed)` to deselect the
  *   tapped MapKit annotation. Our annotations aren't a MapKit selection (a tap is a transient
  *   gesture, no selection state to clear), so dismiss only closes the overlay and pokes
- *   [requestReview] — the App Store review counter (real prompter lands in M16). `imageList(.dismiss)`
- *   likewise only clears the list (its `previewClosed` is beside the point too).
+ *   [requestReview] — the store-review counter (`ReviewPrompter`). `imageList(.dismiss)` likewise
+ *   only clears the list (its `previewClosed` is beside the point too).
  * - [favoritesModel] feeds the live Favorites list; [currentRegionImages] snapshots the visible
  *   region for the "On the map" list (both mirror iOS's `favoritesModel` / `currentRegionImages`).
  *

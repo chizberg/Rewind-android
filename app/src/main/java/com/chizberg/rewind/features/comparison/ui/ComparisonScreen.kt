@@ -45,8 +45,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -128,13 +126,6 @@ fun ComparisonScreen(
     LaunchedEffect(model) { model(ComparisonAction.External.ViewWillAppear) }
 
     LaunchedEffect(state.shouldDismiss) { if (state.shouldDismiss) onDismiss() }
-
-    // iOS fires this inside the reducer's `.shoot`; there is no haptics facade in the port yet
-    // (M16), so the confirmation is played here, off the same counter that drives the blink.
-    val haptics = LocalHapticFeedback.current
-    LaunchedEffect(state.shotsCount) {
-        if (state.shotsCount > 0) haptics.performHapticFeedback(HapticFeedbackType.Confirm)
-    }
 
     // Android-only, see PanoramaZoom: a panorama opens at its widest and there is no iOS control to
     // port. Lives here rather than in the reducer for the same reason the map's cluster zoom does —

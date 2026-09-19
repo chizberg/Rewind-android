@@ -67,11 +67,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
@@ -242,13 +240,6 @@ fun ImageDetailsView(
             deps = deps,
             onDismiss = { model(ImageDetailsAction.Comparison.Dismiss) },
         )
-    }
-
-    // iOS fires a success notification haptic when the photo lands in the library; the reducer has
-    // no haptic handle, so the confirmation is played here off the state flip.
-    val haptics = LocalHapticFeedback.current
-    LaunchedEffect(state.isImageSaved) {
-        if (state.isImageSaved) haptics.performHapticFeedback(HapticFeedbackType.Confirm)
     }
 
     state.alert?.let { params ->

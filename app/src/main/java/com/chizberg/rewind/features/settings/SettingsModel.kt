@@ -2,6 +2,7 @@ package com.chizberg.rewind.features.settings
 
 import com.chizberg.rewind.core.redux.Property
 import com.chizberg.rewind.core.redux.Reducer
+import com.chizberg.rewind.core.util.Haptics
 import com.chizberg.rewind.domain.GradientScheme
 import kotlinx.coroutines.CoroutineScope
 
@@ -69,10 +70,9 @@ private const val REPO_URL = "https://github.com/chizberg/Rewind"
  * branches' own `effect { }` instead — the same shape `FavoritesModel` already uses to persist
  * through a [Property], with no lifecycle machinery to get wrong.
  *
- * [selectionHaptic] stands in for iOS's `UISelectionFeedbackGenerator().selectionChanged()`, which
- * it calls inline in `reduce` on a scheme change. There is no haptics facade in this port yet
- * (M16), so the one call site takes an injected no-op lambda rather than growing half a module for
- * it; the call is wrapped in an `effect { }` as every other side effect in this repo is.
+ * [haptics] carries iOS's `UISelectionFeedbackGenerator().selectionChanged()`, which it constructs
+ * inline in `reduce` on a scheme change; the call sits in the same branch here, wrapped in an
+ * `effect { }` as every other side effect in this repo is.
  *
  * None of the link actions checks whether anything can open the URL first — neither does iOS, and
  * there is no failure branch to port. (`mailto:` still needs its own `<queries>` entry in the
@@ -82,7 +82,7 @@ fun makeSettingsViewModel(
     settings: Property<SettingsState>,
     urlOpener: (String) -> Unit,
     scope: CoroutineScope,
-    selectionHaptic: () -> Unit = {},
+    haptics: Haptics = Haptics.None,
 ): SettingsModel =
     Reducer<SettingsViewState, SettingsAction>(
         initial = SettingsViewState(stored = settings.value),
@@ -97,7 +97,7 @@ fun makeSettingsViewModel(
 
             is SettingsAction.GradientSchemeSelected -> {
                 val stored = state.stored.copy(gradientScheme = action.scheme)
-                effect { selectionHaptic() }
+                effect { haptics.selection() }
                 effect { settings.value = stored }
                 state.copy(stored = stored)
             }

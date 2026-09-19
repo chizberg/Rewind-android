@@ -29,9 +29,15 @@ import kotlinx.coroutines.withContext
  * capture of a 486-cluster wave showed landings arriving in bursts (OkHttp releases ~5 fetches at
  * a time, Coil decodes 4 at a time) and each burst frame paying up to ~19ms of marker
  * recompositions plus a texture-upload spike on the RenderThread — the measured cause of the
- * dropped frames. Ten per frame keeps that cost comfortably inside the frame budget.
+ * dropped frames.
+ *
+ * Three, not the original ten: ten was tuned against a ~17ms frame, but the target devices run
+ * 120Hz (8.3ms budget), and the M16 perf pass measured burst frames on a 120Hz release build at
+ * 10–19ms of `Record View#draw()` — about 1–2ms per landing — plus a concurrent 10–15ms animation
+ * phase. Three keeps the landing share near ~3–4ms. The wave stretches from ~10 to ~28 frames at
+ * 120Hz (≈230ms — the length of the pop-in animation itself), which reads as a cascade, not a lag.
  */
-private const val LANDINGS_PER_FRAME = 10
+private const val LANDINGS_PER_FRAME = 3
 
 // Async systrace section spanning one cluster thumbnail's Coil fetch+decode (cookie = path hash).
 private const val TRACE_CLUSTER_FETCH = "Rewind:clusterFetch"

@@ -1,12 +1,15 @@
-# Add project specific R8 rules here.
-# AGP will combine all keep rule files in src/main/keepRules to pass to R8
+# App keep rules (AGP 9 keepRules source folder, .keep extension required; applied when release minification runs).
 #
-# For more details, see
-#   https://d.android.com/r/tools/r8/keep-rules
+# Deliberately minimal: DI is a hand-written composition root (no reflection), serialization
+# uses compile-time kotlinx serializers, and every library in use (kotlinx.serialization, OkHttp,
+# Coil, GMS Maps/Places, ML Kit, Play Review) ships its own consumer rules. Add rules here only
+# with a reproduced failure in hand — a rule without a failing stack is cargo cult.
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# Readable release stack traces: keep line numbers, hide the original file name.
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile
+
+# Reproduced R8 failure (first minified build, 2026-08-16): play review-ktx 2.0.2 references this
+# GMS *annotation* that no artifact on our classpath ships. Annotations are metadata, absent ones
+# change nothing at runtime — suppress, don't add a dependency for it.
+-dontwarn com.google.android.gms.common.annotation.NoNullnessRewrite

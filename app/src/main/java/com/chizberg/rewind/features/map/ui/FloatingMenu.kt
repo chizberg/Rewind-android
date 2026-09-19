@@ -726,8 +726,9 @@ private val PanelGap = 8.dp
 
 // The unfold's own spring, standing in for iOS `mapControlsAnimation`
 // (`interactiveSpring(duration: 0.5, extraBounce: 0.1)`): slightly under-damped, so the panel
-// settles with a small overshoot rather than a flat ease.
-private val PanelSpring =
+// settles with a small overshoot rather than a flat ease. Shared with the controls' minimize in
+// `RewindMap` — iOS drives both off that one animation as well.
+internal val PanelSpring =
     spring<Float>(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow)
 private val PanelPadding = 4.dp
 private val ControlSpacing = 4.dp

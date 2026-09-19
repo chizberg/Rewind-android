@@ -53,6 +53,14 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Rewind">
 
+        <!--
+            Lets shell tooling (atrace/Perfetto/Macrobenchmark) profile RELEASE builds: without it
+            the app's own androidx.tracing sections ("Rewind:*") never reach a system trace outside
+            debug — and debug numbers are useless for performance work (Compose tooling instruments
+            every composable there). Grants access to shell (adb) only, nothing to other apps.
+        -->
+        <profileable android:shell="true" />
+
         <!-- Maps SDK reads the key from this meta-data; value injected by secrets-gradle-plugin. -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
