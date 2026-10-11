@@ -5,9 +5,11 @@ import android.content.res.Configuration
 
 /**
  * The Android counterpart of iOS's `UIApplication.didReceiveMemoryWarningNotification`: runs
- * [onPressure] when the system says memory is short — on `onLowMemory`, and on a trim that comes
- * while the app sits in the background (the only trims still delivered since API 34 are
- * `UI_HIDDEN` and `BACKGROUND`; `UI_HIDDEN` alone is just "the user left", not pressure).
+ * [onPressure] on `onLowMemory` and on `TRIM_MEMORY_BACKGROUND` or worse. Not the same signal:
+ * since API 34 the only trims still delivered are `UI_HIDDEN` and `BACKGROUND`, and `BACKGROUND`
+ * means the process went into the cached list — which happens on every trip to the background,
+ * pressure or not. So whatever [onPressure] frees is dropped each time the user leaves the app,
+ * and paid for again on return.
  */
 class MemoryPressureObserver(
     private val onPressure: () -> Unit,

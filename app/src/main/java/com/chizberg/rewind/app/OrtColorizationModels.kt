@@ -74,20 +74,28 @@ private class OrtLoader(
 
     suspend fun <T> run(block: (OrtEnvironment, OrtSession) -> T): T =
         withContext(Dispatchers.Default) {
-            mutex.withLock {
-                val environment = OrtEnvironment.getEnvironment()
-                val opened = session ?: open(environment).also { session = it }
-                try {
+            try {
+                mutex.withLock {
+                    // A loader closed before its first run still runs once: the colorize tap came
+                    // first, and the session goes again straight after.
+                    val environment = OrtEnvironment.getEnvironment()
+                    val opened = session ?: open(environment).also { session = it }
                     block(environment, opened)
-                } finally {
-                    if (closed) release()
                 }
+            } finally {
+                // After the lock, not inside it: a close() that came while this run held the lock
+                // could not take it, and would otherwise leave the session to nobody.
+                releaseIfClosed()
             }
         }
 
     override fun close() {
         closed = true
-        if (mutex.tryLock()) {
+        releaseIfClosed()
+    }
+
+    private fun releaseIfClosed() {
+        if (closed && mutex.tryLock()) {
             try {
                 release()
             } finally {
@@ -101,9 +109,7 @@ private class OrtLoader(
         session = null
     }
 
-    @Suppress("ThrowsCount")
     private fun open(environment: OrtEnvironment): OrtSession {
-        if (closed) throw IOException("The colorization model was released")
         if (!file.exists()) throw IOException("The colorization model is not on disk any more")
         val memory = ActivityManager.MemoryInfo()
         context.getSystemService(ActivityManager::class.java).getMemoryInfo(memory)
@@ -112,7 +118,7 @@ private class OrtLoader(
                 "Not enough memory for colorization: ${memory.availMem / MEGABYTE} MB available",
             )
         }
-        return environment.createSession(file.absolutePath, OrtSession.SessionOptions())
+        return OrtSession.SessionOptions().use { environment.createSession(file.absolutePath, it) }
     }
 }
 
