@@ -256,7 +256,9 @@ private fun reduceFile(
 
         ColorizationFileAction.DownloadFinished -> {
             val downloaded = with(ColorizationFileState.Downloaded)
-            if (state.picked == null) {
+            // The setting, as iOS reads it, not `state.picked`: a download outlives the screen
+            // that started it, and a closed picker's state misses a model picked elsewhere since.
+            if (pickedModel.value == null) {
                 effect { pickedModel.value = id }
                 downloaded.copy(picked = id)
             } else {
