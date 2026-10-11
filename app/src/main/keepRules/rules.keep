@@ -13,3 +13,11 @@
 # GMS *annotation* that no artifact on our classpath ships. Annotations are metadata, absent ones
 # change nothing at runtime — suppress, don't add a dependency for it.
 -dontwarn com.google.android.gms.common.annotation.NoNullnessRewrite
+
+# ONNX Runtime (colorization) ships no consumer rules (none in onnxruntime-android-1.22.0.aar), and
+# its JNI code finds Java classes and members by name. The first minified build with it
+# (2026-10-11) renamed OrtException -> z83 and OnnxJavaType -> a73, dropped TensorInfo, and removed
+# the OnnxTensor(long, long, TensorInfo) constructor that the native session.run calls (R8's
+# mapping.txt / usage.txt) — a NoSuchMethodError / NoClassDefFoundError on the first colorize of a
+# release build, an Error that no catch (Exception) stops. Keep the whole (small) Java API as is.
+-keep class ai.onnxruntime.** { *; }
