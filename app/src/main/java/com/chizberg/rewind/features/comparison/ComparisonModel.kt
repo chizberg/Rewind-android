@@ -335,38 +335,45 @@ fun makeComparisonModel(
                     state
                 }
 
+            // The view says this again whenever the activity is recreated (a rotation), where
+            // iOS's `.task` runs once. A photo already taken stays on screen, and Street View is
+            // set up once; only a live camera has to be started again, on the new view.
             ComparisonAction.External.ViewWillAppear ->
                 when (state.captureMode) {
                     ComparisonState.CaptureMode.Camera -> {
-                        effect { cameraSession?.requestAccess() }
+                        if (state.captureState !is ComparisonState.CaptureState.Taken) {
+                            effect { cameraSession?.requestAccess() }
+                        }
                         state
                     }
 
                     ComparisonState.CaptureMode.StreetView -> {
-                        // Two independent effects, as on iOS: the panorama is built at once and
-                        // the availability lookup catches up with it.
-                        asyncEffect(
-                            AsyncEffect.perform { send ->
-                                try {
-                                    send(
-                                        ComparisonAction.Internal.StreetViewAvailabilityLoaded(
-                                            streetViewAvailability.load(Unit),
-                                        ),
-                                    )
-                                } catch (e: CancellationException) {
-                                    throw e
-                                } catch (e: Exception) {
-                                    // Swallowed on purpose, as iOS spells out: the user is only
-                                    // blocked when Street View is *surely* unavailable, never
-                                    // because the metadata call itself failed.
-                                }
-                            },
-                        )
-                        asyncEffect(
-                            AsyncEffect.anotherAction(
-                                action = ComparisonAction.Internal.SetupCapture,
-                            ),
-                        )
+                        if (state.captureState == null) {
+                            // Two independent effects, as on iOS: the panorama is built at once and
+                            // the availability lookup catches up with it.
+                            asyncEffect(
+                                AsyncEffect.perform { send ->
+                                    try {
+                                        send(
+                                            ComparisonAction.Internal.StreetViewAvailabilityLoaded(
+                                                streetViewAvailability.load(Unit),
+                                            ),
+                                        )
+                                    } catch (e: CancellationException) {
+                                        throw e
+                                    } catch (e: Exception) {
+                                        // Swallowed on purpose, as iOS spells out: the user is only
+                                        // blocked when Street View is *surely* unavailable, never
+                                        // because the metadata call itself failed.
+                                    }
+                                },
+                            )
+                            asyncEffect(
+                                AsyncEffect.anotherAction(
+                                    action = ComparisonAction.Internal.SetupCapture,
+                                ),
+                            )
+                        }
                         state
                     }
                 }
