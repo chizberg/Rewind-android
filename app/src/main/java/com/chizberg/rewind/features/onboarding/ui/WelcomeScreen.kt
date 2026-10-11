@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
@@ -92,8 +93,9 @@ private fun Hero() {
                 text =
                     buildAnnotatedString {
                         append(stringResource(R.string.onboarding_this_is))
-                        // The wordmark keeps the brand red on both platforms — see [RewindRed].
-                        withStyle(SpanStyle(color = RewindRed)) {
+                        // The wordmark keeps the brand red on both platforms — see [RewindRed] —
+                        // and is set in serif, as on iOS (4b0a0fb).
+                        withStyle(SpanStyle(color = RewindRed, fontFamily = FontFamily.Serif)) {
                             append(stringResource(R.string.app_name))
                         }
                     },

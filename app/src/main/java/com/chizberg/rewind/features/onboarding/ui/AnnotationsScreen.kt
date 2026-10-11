@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.chizberg.rewind.R
@@ -59,6 +60,7 @@ fun AnnotationsScreen(
             Text(
                 text = stringResource(R.string.onboarding_history_on_a_map),
                 style = MaterialTheme.typography.displaySmall,
+                fontFamily = FontFamily.Serif,
                 fontWeight = FontWeight.Bold,
             )
             Text(
