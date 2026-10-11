@@ -1,5 +1,8 @@
 package com.chizberg.rewind.features.details.ui
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -56,6 +59,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -70,6 +74,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
@@ -81,6 +86,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.fromHtml
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImagePainter
 import com.chizberg.rewind.R
@@ -909,6 +917,23 @@ private fun FullscreenImage(
     val zoomed = (zoomable.zoomFraction ?: 0f) > 0f
     LaunchedEffect(zoomed) { controlsHidden = zoomed }
 
+    // iOS 0da82b1: the status bar goes with the controls, so a hidden chrome leaves the photo
+    // alone on screen. Only the status bar, as on iOS (its home indicator stays); a swipe from the
+    // edge brings it back transiently. Leaving the viewer always restores it.
+    val view = LocalView.current
+    DisposableEffect(view, controlsHidden) {
+        val window = view.context.findActivity()?.window
+        val insets = window?.let { WindowCompat.getInsetsController(it, view) }
+        insets?.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        if (controlsHidden) {
+            insets?.hide(WindowInsetsCompat.Type.statusBars())
+        } else {
+            insets?.show(WindowInsetsCompat.Type.statusBars())
+        }
+        onDispose { insets?.show(WindowInsetsCompat.Type.statusBars()) }
+    }
+
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         ZoomableAsyncImage(
             model =
@@ -960,3 +985,10 @@ private fun FullscreenImage(
         )
     }
 }
+
+private tailrec fun Context.findActivity(): Activity? =
+    when (this) {
+        is Activity -> this
+        is ContextWrapper -> baseContext.findActivity()
+        else -> null
+    }
