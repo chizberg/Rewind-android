@@ -42,6 +42,10 @@ class DownloadPerformer(
     private val temporaryDirectory: File,
     private val scope: CoroutineScope,
 ) {
+    /** Whether the leftovers of an earlier process are gone; guarded by itself. */
+    private var leftoversCleared = false
+    private val leftoversLock = Any()
+
     sealed interface Progress {
         data class Downloading(
             val fraction: Float,
@@ -103,6 +107,7 @@ class DownloadPerformer(
                 if (!it.isSuccessful) throw NetworkError.InvalidCode(it.code)
                 val body = it.body ?: throw NetworkError.ParsingFailure(desc = "No file")
                 val total = body.contentLength()
+                clearLeftovers()
                 temporaryDirectory.mkdirs()
                 val destination = File(temporaryDirectory, UUID.randomUUID().toString())
                 try {
@@ -118,6 +123,19 @@ class DownloadPerformer(
             }
         }
     }
+
+    /**
+     * A download the process did not survive leaves its partial file behind — hundreds of
+     * megabytes for a colorization model. Before the first file of this process no download of
+     * ours is running, so whatever is there is such a leftover; the lock keeps a second first
+     * download from creating its file while the first one is still clearing.
+     */
+    private fun clearLeftovers() =
+        synchronized(leftoversLock) {
+            if (leftoversCleared) return
+            temporaryDirectory.listFiles()?.forEach { it.delete() }
+            leftoversCleared = true
+        }
 
     private suspend fun copy(
         input: InputStream,
