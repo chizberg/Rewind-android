@@ -104,7 +104,7 @@ typealias ImageDetailsModel = Reducer<ImageDetailsState, ImageDetailsAction>
  *   ImageLoader hands back the bitmap; ours follows the project-wide Coil divergence — the picture
  *   is loaded from [ModelImage.imagePath] by Coil in the view. Share / save (which need the actual
  *   pixels) go through the injected [ImageSaver] / [ImageSharer], which pull them from the same
- *   loader; the reducer only tracks that a save succeeded ([isImageSaved], as on iOS).
+ *   loader; the reducer only counts successful saves ([imageSaveCount], as on iOS).
  * - **no `Identified` wrapper** around the nested details / alert: Compose overlays key off content
  *   presence, so plain nullables suffice.
  */
@@ -114,7 +114,9 @@ data class ImageDetailsState(
     val isFavorite: Boolean,
     val actionButtons: List<ImageDetailsAction.Button>,
     val details: ModelImageDetails? = null,
-    val isImageSaved: Boolean = false,
+    /** iOS `imageSaveCount`: every save bumps it, so the fullscreen viewer's banner re-announces a
+     * second save; [isImageSaved] is derived from it, as on iOS. */
+    val imageSaveCount: Int = 0,
     val loadingAnotherImage: Boolean = false,
     val mapOptionsPresented: Boolean = false,
     val fullscreenPresented: Boolean = false,
@@ -128,7 +130,9 @@ data class ImageDetailsState(
     /** Port of iOS `cachedTranslation`: survives "Show Original", spent only by a fresh
      * `makeImageDetailsModel` (a new screen instance). */
     val cachedTranslation: Translation? = null,
-)
+) {
+    val isImageSaved: Boolean get() = imageSaveCount > 0
+}
 
 sealed interface ImageDetailsAction {
     /** The screen is about to appear: kick off the details load. */
@@ -626,7 +630,7 @@ fun makeImageDetailsModel(
 
             ImageDetailsAction.Internal.ImageSaved -> {
                 effect { haptics.success() }
-                state.copy(isImageSaved = true)
+                state.copy(imageSaveCount = state.imageSaveCount + 1)
             }
 
             // Port of iOS `apply(details:to:)`, split in two because the detector is asynchronous

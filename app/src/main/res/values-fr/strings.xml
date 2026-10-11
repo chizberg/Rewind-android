@@ -91,7 +91,7 @@
     <!-- M14: then/now comparison -->
     <string name="action_compare">Comparer</string>
     <string name="action_compare_street_view">Comparer avec Google Street View</string>
-    <string name="comparison_saved_to_photos">Enregistré dans Photos</string>
+    <string name="saved_to_photos">Enregistré dans Photos</string>
     <string name="comparison_retake">Reprendre</string>
     <string name="comparison_style_side_by_side">Côte à côte</string>
     <string name="comparison_style_card_on_card">Carte sur carte</string>

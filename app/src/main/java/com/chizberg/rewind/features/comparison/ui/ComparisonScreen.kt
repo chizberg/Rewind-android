@@ -1,11 +1,6 @@
 package com.chizberg.rewind.features.comparison.ui
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,7 +19,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material.icons.rounded.FilterNone
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Remove
@@ -37,7 +31,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -57,10 +50,9 @@ import com.chizberg.rewind.features.comparison.ComparisonState
 import com.chizberg.rewind.features.comparison.ComparisonViewDeps
 import com.chizberg.rewind.features.comparison.Orientation
 import com.chizberg.rewind.features.comparison.year
+import com.chizberg.rewind.ui.SavedBanner
 import com.chizberg.rewind.ui.theme.RewindTheme
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.emptyFlow
-import kotlin.time.Duration.Companion.seconds
 
 /** iOS `Color.clear.aspectRatio(4 / 6)`: two 4:3 frames stacked. */
 private const val CANVAS_ASPECT = 4f / 6f
@@ -77,9 +69,6 @@ private val PickersGap = 20.dp
 private val ControlsGap = 75.dp
 
 private val OverlayButtonSize = 48.dp
-
-/** How long "Saved to Photos" stays up — iOS's `.pause` phase between the two slides. */
-private val BannerDuration = 2.seconds
 
 /**
  * The then/now comparison screen. Port of iOS `ComparisonScreen`: the canvas pinned to the top, the
@@ -447,48 +436,6 @@ private fun OverlayIconButton(
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(imageVector = icon, contentDescription = contentDescription)
-        }
-    }
-}
-
-/**
- * iOS `SavedBanner`: a capsule that slides down from the top on every save, waits, and slides back
- * out. Keyed on the save counter, so a second save re-announces itself.
- *
- * Deliberately its own host rather than the app's (future) snackbar: this one belongs to the
- * screen, and M3's bottom snackbar would land under the shutter.
- */
-@Composable
-private fun SavedBanner(
-    savesCount: Int,
-    modifier: Modifier = Modifier,
-) {
-    var visible by remember { mutableStateOf(false) }
-    LaunchedEffect(savesCount) {
-        if (savesCount == 0) return@LaunchedEffect
-        visible = true
-        delay(BannerDuration)
-        visible = false
-    }
-    AnimatedVisibility(
-        visible = visible,
-        modifier = modifier,
-        enter = slideInVertically { -it } + fadeIn(),
-        exit = slideOutVertically { -it } + fadeOut(),
-    ) {
-        Surface(
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.inverseSurface,
-            contentColor = MaterialTheme.colorScheme.inverseOnSurface,
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Icon(Icons.Rounded.DownloadDone, contentDescription = null)
-                Text(stringResource(R.string.comparison_saved_to_photos))
-            }
         }
     }
 }

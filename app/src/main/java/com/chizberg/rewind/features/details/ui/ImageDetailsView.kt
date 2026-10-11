@@ -101,6 +101,7 @@ import com.chizberg.rewind.network.ImageQuality
 import com.chizberg.rewind.ui.DirectionBadge
 import com.chizberg.rewind.ui.ImageDateBadge
 import com.chizberg.rewind.ui.Overlay
+import com.chizberg.rewind.ui.SavedBanner
 import me.saket.telephoto.zoomable.ZoomSpec
 import me.saket.telephoto.zoomable.coil3.ZoomableAsyncImage
 import me.saket.telephoto.zoomable.rememberZoomableImageState
@@ -223,7 +224,7 @@ fun ImageDetailsView(
     ) { shown ->
         FullscreenImage(
             image = shown,
-            isImageSaved = state.isImageSaved,
+            savesCount = state.imageSaveCount,
             onSave = { model(ImageDetailsAction.FullscreenPreview.SaveImage) },
             onDismiss = { model(ImageDetailsAction.FullscreenPreview.Dismiss) },
         )
@@ -886,7 +887,7 @@ private val MapApp.appName: String
 @Composable
 private fun FullscreenImage(
     image: ModelImage,
-    isImageSaved: Boolean,
+    savesCount: Int,
     onSave: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -938,11 +939,21 @@ private fun FullscreenImage(
             ) {
                 BackButton(onClick = onDismiss)
                 OverlayButton(
-                    icon = saveIcon(isImageSaved),
+                    icon = saveIcon(isImageSaved = savesCount > 0),
                     contentDescription = stringResource(R.string.action_save_image),
                     onClick = onSave,
                 )
             }
         }
+        // iOS `ZoomableImageScreen`: the banner sits outside the controls' fade, so it shows even
+        // when a zoomed-in photo has hidden them.
+        SavedBanner(
+            savesCount = savesCount,
+            modifier =
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .safeDrawingPadding()
+                    .padding(top = 5.dp),
+        )
     }
 }
