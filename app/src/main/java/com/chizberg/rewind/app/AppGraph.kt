@@ -18,6 +18,7 @@ import com.chizberg.rewind.domain.ImageSorting
 import com.chizberg.rewind.domain.ModelImage
 import com.chizberg.rewind.domain.ModelImageDetails
 import com.chizberg.rewind.domain.StreetViewAvailability
+import com.chizberg.rewind.features.comparison.CaptureKind
 import com.chizberg.rewind.features.comparison.ComparisonRenderer
 import com.chizberg.rewind.features.comparison.ComparisonState
 import com.chizberg.rewind.features.comparison.ComparisonViewDeps
@@ -338,13 +339,14 @@ class AppGraph(
                     renderer = renderer,
                     orientation = deviceOrientation(appContext),
                     haptics = haptics,
-                    saveImage = { captured ->
-                        imageExport.save(captured.bitmap(), comparisonFileName(image.cid))
+                    saveOldImage = imageExport::save,
+                    saveImage = { captured, kind ->
+                        imageExport.save(captured.bitmap(), comparisonFileName(image.cid, kind))
                     },
                     shareImage = { captured, title, url ->
                         imageExport.share(
                             bitmap = captured.bitmap(),
-                            fileName = comparisonFileName(image.cid),
+                            fileName = comparisonFileName(image.cid, CaptureKind.Comparison),
                             title = title,
                             // iOS joins the same two items into the text it shares beside the
                             // image (`makeShareVC`: title, no description, url).

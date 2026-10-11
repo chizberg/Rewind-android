@@ -8,6 +8,7 @@ import com.chizberg.rewind.core.redux.Reducer
 import com.chizberg.rewind.core.util.Haptics
 import com.chizberg.rewind.domain.ModelImage
 import com.chizberg.rewind.domain.StreetViewAvailability
+import com.chizberg.rewind.features.details.ImageSaver
 import com.chizberg.rewind.features.details.pastVuUrl
 import com.chizberg.rewind.network.Remote
 import kotlinx.coroutines.CoroutineScope
@@ -18,8 +19,18 @@ import kotlin.coroutines.cancellation.CancellationException
 /** The then/now comparison reducer. Port of the iOS `ComparisonModel` typealias. */
 typealias ComparisonModel = Reducer<ComparisonState, ComparisonAction>
 
-/** Writes the composite (old photo + fresh frame) to the gallery. iOS `save(image:)`, M9's path. */
-typealias CaptureSaver = suspend (CapturedImage) -> Unit
+/** Writes a capture to the gallery. iOS `save(image:)`, M9's path; [CaptureKind] lets the gallery
+ *  name the fresh frame and the composite apart. */
+typealias CaptureSaver = suspend (CapturedImage, CaptureKind) -> Unit
+
+/** Which of the two captures of one shot is being saved. */
+enum class CaptureKind {
+    /** The full-resolution camera photo or Street View frame on its own. */
+    Shot,
+
+    /** iOS `renderView(comparisonVC.view)`: the composite the screen is for. */
+    Comparison,
+}
 
 /** Hands the composite to the share sheet. iOS `makeShareVC(image:title:description:nil,url:)`. */
 typealias CaptureSharer = suspend (image: CapturedImage, title: String, url: String) -> Unit
@@ -219,6 +230,7 @@ fun makeComparisonModel(
     cameraSession: CameraSession?,
     renderer: ComparisonRenderer,
     orientation: Flow<Orientation>,
+    saveOldImage: ImageSaver,
     saveImage: CaptureSaver,
     shareImage: CaptureSharer,
     haptics: Haptics = Haptics.None,
@@ -403,11 +415,20 @@ fun makeComparisonModel(
                 effect { cameraSession?.stop() }
                 // iOS renders the very same composite twice — once implicitly for the preview, and
                 // here again for the gallery. Ours renders it once, off the canvas the screen has
-                // just redrawn with the frame in it.
+                // just redrawn with the frame in it — and, as on iOS, before anything else is
+                // awaited: rendered after a gallery round trip, the snapshot drifts a few frames.
+                // Then all three go to the gallery, oldest first, so the composite ends up newest
+                // (iOS d8abbc7: the composite crops both halves and bakes the years in, so the
+                // full-resolution sources are worth keeping). One `ImageSaved` per shot, so the
+                // banner announces it once, not three times.
+                val shot = action.image
                 asyncEffect(
                     AsyncEffect.perform { send ->
                         try {
-                            saveImage(renderer.renderCanvas())
+                            val comparison = renderer.renderCanvas()
+                            saveOldImage(oldImage)
+                            saveImage(shot, CaptureKind.Shot)
+                            saveImage(comparison, CaptureKind.Comparison)
                             send(ComparisonAction.Internal.ImageSaved)
                         } catch (e: CancellationException) {
                             throw e

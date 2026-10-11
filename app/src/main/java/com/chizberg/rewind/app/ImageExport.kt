@@ -17,6 +17,7 @@ import coil3.request.allowHardware
 import coil3.size.Size
 import coil3.toBitmap
 import com.chizberg.rewind.domain.ModelImage
+import com.chizberg.rewind.features.comparison.CaptureKind
 import com.chizberg.rewind.features.details.ShareContent
 import com.chizberg.rewind.network.ImageQuality
 import com.chizberg.rewind.network.imageUrl
@@ -185,10 +186,17 @@ private fun Bitmap.writeJpeg(stream: OutputStream) {
 
 private fun fileName(image: ModelImage): String = "pastvu_${image.cid}.jpg"
 
-/** The comparison composite of the same photo — a sibling name, so the two sit together in the
- *  album. A second shot of the same photo becomes "… (1).jpg", MediaStore's own doing (as on iOS,
- *  where a second save is a second asset). */
-fun comparisonFileName(cid: Int): String = "pastvu_${cid}_comparison.jpg"
+/** The comparison shot and composite of the same photo — sibling names, so they sit together with
+ *  the old photo in the album. A second shot of the same photo becomes "… (1).jpg", MediaStore's
+ *  own doing (as on iOS, where a second save is a second asset). */
+fun comparisonFileName(
+    cid: Int,
+    kind: CaptureKind,
+): String =
+    when (kind) {
+        CaptureKind.Shot -> "pastvu_${cid}_now.jpg"
+        CaptureKind.Comparison -> "pastvu_${cid}_comparison.jpg"
+    }
 
 /**
  * Title, description and link as one blob — see [ImageExport.share]. The description is PastVu HTML
