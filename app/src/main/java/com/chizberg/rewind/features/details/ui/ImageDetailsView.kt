@@ -85,7 +85,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -139,7 +139,7 @@ import com.chizberg.rewind.ui.ImageDateBadge
 import com.chizberg.rewind.ui.Overlay
 import com.chizberg.rewind.ui.SavedBanner
 import com.chizberg.rewind.ui.rainbowColors
-import com.chizberg.rewind.ui.toBitmap
+import com.chizberg.rewind.ui.rememberImageBitmap
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import me.saket.telephoto.zoomable.ZoomSpec
@@ -1059,7 +1059,7 @@ private fun FullscreenImage(
                 placeholderQuality = ImageQuality.Medium,
             )
         // iOS opens the viewer on `displayedImage`: the colorized photo while it is on screen.
-        val colorizedBitmap = remember(colorized) { colorized?.toBitmap() }
+        val colorizedBitmap = rememberImageBitmap(colorized)?.asAndroidBitmap()
         ZoomableAsyncImage(
             model = colorizedBitmap ?: request,
             contentDescription = image.title,
@@ -1126,9 +1126,12 @@ private fun pictureColorization(
     state: ImageDetailsState,
     buttonCenter: Offset?,
 ): PictureColorization {
-    val colorized = state.colorizedImage
-    val bitmap = remember(colorized) { colorized?.toBitmap()?.asImageBitmap() }
-    return PictureColorization(bitmap, state.pixels, state.isColorizing, buttonCenter)
+    // Converted as soon as the result is in, not on the first switch to it: the toggle back and
+    // forth then has a bitmap ready.
+    val ready = state.colorizationState as? ColorizationState.Ready
+    val bitmap = rememberImageBitmap(ready?.colorized)
+    val shown = bitmap?.takeIf { ready?.showing == ColorizationState.Showing.Colorized }
+    return PictureColorization(shown, state.pixels, state.isColorizing, buttonCenter)
 }
 
 /** iOS `ColorizeButton.Phase`. */

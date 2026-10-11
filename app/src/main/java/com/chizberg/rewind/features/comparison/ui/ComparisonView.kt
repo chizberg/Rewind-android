@@ -53,7 +53,7 @@ import com.chizberg.rewind.domain.ModelImage
 import com.chizberg.rewind.features.comparison.ComparisonState
 import com.chizberg.rewind.features.map.ui.RewindAsyncImage
 import com.chizberg.rewind.network.ImageQuality
-import com.chizberg.rewind.ui.toBitmap
+import com.chizberg.rewind.ui.rememberImageBitmap
 import java.time.LocalDate
 
 /** iOS `CardOnCardView.scale` / `.radius`. */
@@ -130,7 +130,7 @@ fun ComparisonView(
 ) {
     val currentYear = remember { LocalDate.now().year }
 
-    val colorizedBitmap = remember(oldColorized) { oldColorized?.toBitmap()?.asImageBitmap() }
+    val colorizedBitmap = rememberImageBitmap(oldColorized)
     LaunchedEffect(oldColorized) {
         oldColorized?.let { onOldAspectLoaded(it.width.toFloat() / it.height) }
     }
