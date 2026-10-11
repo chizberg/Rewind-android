@@ -42,6 +42,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImagePainter
@@ -282,6 +284,27 @@ private fun CardOnCardView(
         )
     }
 }
+
+/**
+ * Where the live half's top trailing corner sits in a canvas [canvasWidth] wide, so chrome that
+ * belongs to the viewfinder (the panorama's zoom) can float over it rather than over the canvas's
+ * own corner: side by side that is the canvas's corner, card on card it is the corner of the "now"
+ * card — the canvas's corner there holds the year label and the wordmark.
+ */
+internal fun viewfinderTopEnd(
+    style: ComparisonState.Style,
+    canvasWidth: Dp,
+): DpOffset =
+    when (style) {
+        ComparisonState.Style.SideBySide -> DpOffset(canvasWidth, 0.dp)
+        // The cards fill the padded canvas (its shape is the old photo's) and shrink towards
+        // their own corner, the "now" one towards the top leading.
+        ComparisonState.Style.CardOnCard ->
+            DpOffset(
+                CardStackPadding + (canvasWidth - CardStackPadding * 2) * CARD_SCALE,
+                CardStackPadding,
+            )
+    }
 
 /** iOS `.opacity(0.5)` on the wordmark. */
 private const val WORDMARK_ALPHA = 0.5f

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -241,20 +242,20 @@ private fun ComparisonCanvas(
             )
 
             if (state.showsPanoramaZoom) {
-                PanoramaZoomControl(
-                    zoom = panoramaZoom,
-                    modifier =
-                        Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(ZoomInset),
-                )
+                val corner = viewfinderTopEnd(state.style, canvasWidth)
+                Box(Modifier.width(corner.x).padding(top = corner.y)) {
+                    PanoramaZoomControl(
+                        zoom = panoramaZoom,
+                        modifier = Modifier.align(Alignment.TopEnd).padding(ZoomInset),
+                    )
+                }
             }
         }
     }
 }
 
-/** How far the zoom stack floats off the canvas's corner. Google's own attribution sits along the
- *  panorama's bottom edge, so the top one is the free corner. */
+/** How far the zoom stack floats off the viewfinder's corner. Google's own attribution sits along
+ *  the panorama's bottom edge, so the top one is the free corner. */
 private val ZoomInset = 12.dp
 
 /** iOS `pickers`: the style control always, the lens control only while a camera is live. The
