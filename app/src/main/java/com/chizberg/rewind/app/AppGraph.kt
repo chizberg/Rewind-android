@@ -13,7 +13,6 @@ import com.chizberg.rewind.BuildConfig
 import com.chizberg.rewind.R
 import com.chizberg.rewind.core.redux.Property
 import com.chizberg.rewind.core.redux.Reducer
-import com.chizberg.rewind.core.util.OrientationLock
 import com.chizberg.rewind.domain.ImageSorting
 import com.chizberg.rewind.domain.ModelImage
 import com.chizberg.rewind.domain.ModelImageDetails
@@ -59,7 +58,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
@@ -294,14 +292,6 @@ class AppGraph(
             openAppSettings = openAppSettings,
         )
 
-    // What screen, if any, is currently holding the device in one orientation. Port of iOS's
-    // `AppGraph.orientationLock` property, which its AppDelegate answers
-    // `supportedInterfaceOrientationsFor` out of; here [OrientationLockHost] collects it in the
-    // root view and sets `requestedOrientation`.
-    private val orientationLockMutable = MutableStateFlow<OrientationLock?>(null)
-
-    val orientationLock: StateFlow<OrientationLock?> = orientationLockMutable
-
     /**
      * One comparison screen, built the moment its button is tapped. Port of the
      * `makeComparisonViewDeps` call iOS makes inline inside its details reducer.
@@ -319,8 +309,8 @@ class AppGraph(
                 ComparisonState.CaptureMode.StreetView -> null
             }
         // The screen's own scope: same main dispatcher as every other reducer, but a job of its
-        // own, so closing the screen ends the orientation-sensor subscription that
-        // `Reducer.adding` starts (on iOS the tracker simply dies with the model).
+        // own, so closing the screen ends the camera-events subscription that `Reducer.adding`
+        // starts (on iOS it simply dies with the model).
         val presentationScope =
             CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job]))
         ComparisonViewDeps(
@@ -337,7 +327,6 @@ class AppGraph(
                         },
                     cameraSession = cameraSession,
                     renderer = renderer,
-                    orientation = deviceOrientation(appContext),
                     haptics = haptics,
                     saveOldImage = imageExport::save,
                     saveImage = { captured, kind ->
@@ -392,7 +381,6 @@ class AppGraph(
             saveImage = imageExport::save,
             shareImage = imageExport::share,
             makeComparison = comparisonFactory,
-            setOrientationLock = { orientationLockMutable.value = it },
             translate = remotes.translate,
             detectLanguage = languageDetector,
             haptics = haptics,

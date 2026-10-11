@@ -27,10 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,10 +52,9 @@ import com.chizberg.rewind.features.map.ui.RewindAsyncImage
 import com.chizberg.rewind.network.ImageQuality
 import java.time.LocalDate
 
-/** iOS `CardOnCardView.scale` / `.radius`, and its `3/4` fallback aspect for the cards. */
+/** iOS `CardOnCardView.scale` / `.radius`. */
 private const val CARD_SCALE = 0.6f
 private val CARD_RADIUS = 10.dp
-private const val DEFAULT_OLD_ASPECT = 3f / 4f
 
 /**
  * iOS renders the divider row at a flat `.system(size: 11)` — a *whole* font, not just a size. The
@@ -121,14 +117,13 @@ fun ComparisonView(
     captureState: ComparisonState.CaptureState?,
     streetViewYear: Int?,
     shotsCount: Int,
+    oldAspect: Float,
+    onOldAspectLoaded: (Float) -> Unit,
     viewfinder: @Composable (Modifier) -> Unit,
     recorder: Modifier,
     modifier: Modifier = Modifier,
 ) {
     val currentYear = remember { LocalDate.now().year }
-    // iOS takes the card aspect from the decoded old image; ours learns it from Coil when the
-    // photo lands (the reducer holds no bitmap), until then the same 3:4 iOS falls back to.
-    var oldAspect by remember(oldImage.cid) { mutableFloatStateOf(DEFAULT_OLD_ASPECT) }
 
     val old: @Composable (Modifier) -> Unit = { innerModifier ->
         RewindAsyncImage(
@@ -140,7 +135,12 @@ fun ComparisonView(
             placeholderQuality = ImageQuality.Medium,
             onState = { state ->
                 (state as? AsyncImagePainter.State.Success)?.painter?.intrinsicSize?.let { size ->
-                    if (size.width > 0f && size.height > 0f) oldAspect = size.width / size.height
+                    // iOS takes the card aspect from the decoded old image; ours learns it from
+                    // Coil when the photo lands (the reducer holds no bitmap) and hands it to the
+                    // state, which lays the screen out around it.
+                    if (size.width > 0f && size.height > 0f) {
+                        onOldAspectLoaded(size.width / size.height)
+                    }
                 }
             },
         )

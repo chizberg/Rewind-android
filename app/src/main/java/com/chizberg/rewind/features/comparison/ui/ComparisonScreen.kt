@@ -1,6 +1,5 @@
 package com.chizberg.rewind.features.comparison.ui
 
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -8,13 +7,12 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -32,14 +30,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chizberg.rewind.R
@@ -48,14 +47,10 @@ import com.chizberg.rewind.app.RewindAlert
 import com.chizberg.rewind.features.comparison.ComparisonAction
 import com.chizberg.rewind.features.comparison.ComparisonState
 import com.chizberg.rewind.features.comparison.ComparisonViewDeps
-import com.chizberg.rewind.features.comparison.Orientation
 import com.chizberg.rewind.features.comparison.year
 import com.chizberg.rewind.ui.SavedBanner
 import com.chizberg.rewind.ui.theme.RewindTheme
 import kotlinx.coroutines.flow.emptyFlow
-
-/** iOS `Color.clear.aspectRatio(4 / 6)`: two 4:3 frames stacked. */
-private const val CANVAS_ASPECT = 4f / 6f
 
 /** iOS `shutterButtonSize` and its inner ring inset. */
 private val ShutterSize = 80.dp
@@ -121,9 +116,9 @@ fun ComparisonScreen(
     // the camera it moves belongs to the view, not to the state.
     val panoramaZoom = remember { PanoramaZoom() }
 
-    // iOS `rotating(with:)`: the screen stays portrait, so every glyph on it turns back by hand.
-    val rotation by
-        animateFloatAsState(state.orientation.rotationAngle, label = "controlRotation")
+    // The panorama the user has turned to face the scene outlives the activity a rotation rebuilds
+    // (see PanoramaMemory). Hoisted to the screen so a retake comes back to it as well.
+    val panoramaMemory = rememberSaveable(saver = PanoramaMemory.Saver) { PanoramaMemory() }
 
     RewindTheme(darkTheme = true) {
         // A `Surface`, not a `Box` with a background: it is what puts `onSurface` into
@@ -134,8 +129,12 @@ fun ComparisonScreen(
             modifier = modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.surface,
         ) {
-            Box(Modifier.fillMaxSize()) {
-                ComparisonCanvas(deps, state, panoramaZoom, rotation)
+            // iOS `viewSize` / `axis`: the controls go beside the canvas when the screen is wider
+            // than the canvas is, below it otherwise — measured on the whole screen, safe area and
+            // all, as iOS reads the size off its edge-to-edge background.
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+                val wide = maxWidth / maxHeight > state.aspectRatio
+                ComparisonCanvas(deps, state, model::invoke, panoramaZoom, panoramaMemory)
 
                 SavedBanner(
                     savesCount = state.savesCount,
@@ -146,18 +145,34 @@ fun ComparisonScreen(
                             .padding(top = 5.dp),
                 )
 
-                Column(
-                    modifier =
-                        Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
-                            .safeDrawingPadding()
-                            .padding(bottom = ControlsGap),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(PickersGap),
-                ) {
-                    Pickers(state, model::invoke, rotation)
-                    BottomControls(state, model::invoke, onDismiss)
+                if (wide) {
+                    Row(
+                        modifier =
+                            Modifier
+                                .align(Alignment.CenterEnd)
+                                .fillMaxHeight()
+                                .safeDrawingPadding()
+                                .padding(end = ControlsGap),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(PickersGap),
+                    ) {
+                        Pickers(state, model::invoke, vertical = true)
+                        BottomControls(state, model::invoke, onDismiss, vertical = true)
+                    }
+                } else {
+                    Column(
+                        modifier =
+                            Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .safeDrawingPadding()
+                                .padding(bottom = ControlsGap),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(PickersGap),
+                    ) {
+                        Pickers(state, model::invoke, vertical = false)
+                        BottomControls(state, model::invoke, onDismiss, vertical = false)
+                    }
                 }
             }
         }
@@ -172,41 +187,40 @@ fun ComparisonScreen(
 }
 
 /**
- * The composite itself, sized 4:6 and pinned to the top (iOS `VStack { canvas; Spacer() }`), with
- * the recorder that turns it into the saved / shared image wrapped around it.
- *
- * The width is capped so the canvas always fits the height it has: the screen is portrait-locked
- * while it is up, but a tablet — or the frame or two before the lock lands — must not push the
- * bottom of the photo off screen.
+ * The composite itself, fitted to [ComparisonState.aspectRatio] and centred (iOS
+ * `AxisStack { Spacer; canvas.aspectRatio(contentMode: .fit); Spacer }`), with the recorder that
+ * turns it into the saved / shared image wrapped around it.
  */
 @Composable
 private fun ComparisonCanvas(
     deps: ComparisonViewDeps,
     state: ComparisonState,
+    dispatch: (ComparisonAction) -> Unit,
     panoramaZoom: PanoramaZoom,
-    rotation: Float,
+    panoramaMemory: PanoramaMemory,
 ) {
     val recorder =
         canvasRecorder(
             renderer = deps.renderer,
             enabled = state.captureState is ComparisonState.CaptureState.Taken,
         )
-    // Inside the safe area, as iOS's `VStack { canvas; Spacer() }` is — only the black behind it
-    // (`Color.systemBackground.ignoresSafeArea()`, our `Surface`) runs under the status bar.
-    BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
-        val canvasWidth = minOf(maxWidth, maxHeight * CANVAS_ASPECT)
-        Box(
-            Modifier
-                .align(Alignment.TopCenter)
-                .width(canvasWidth)
-                .aspectRatio(CANVAS_ASPECT),
-        ) {
+    // Inside the safe area, as iOS's stack is — only the black behind it
+    // (`Color.systemBackground.ignoresSafeArea()`, our `Surface`) runs under the system bars.
+    BoxWithConstraints(
+        Modifier.fillMaxSize().safeDrawingPadding(),
+        contentAlignment = Alignment.Center,
+    ) {
+        val ratio = state.aspectRatio
+        val canvasWidth = minOf(maxWidth, maxHeight * ratio)
+        Box(Modifier.size(canvasWidth, canvasWidth / ratio)) {
             ComparisonView(
                 style = state.style,
                 oldImage = state.oldImage,
                 captureState = state.captureState,
                 streetViewYear = state.streetViewAvailability.year,
                 shotsCount = state.shotsCount,
+                oldAspect = state.oldImageAspectRatio,
+                onOldAspectLoaded = { dispatch(ComparisonAction.External.OldImageSizeLoaded(it)) },
                 viewfinder = { viewfinderModifier ->
                     when (state.captureMode) {
                         ComparisonState.CaptureMode.Camera ->
@@ -217,6 +231,7 @@ private fun ComparisonCanvas(
                                 image = state.oldImage,
                                 renderer = deps.renderer,
                                 zoom = panoramaZoom,
+                                memory = panoramaMemory,
                                 modifier = viewfinderModifier,
                             )
                     }
@@ -228,7 +243,6 @@ private fun ComparisonCanvas(
             if (state.showsPanoramaZoom) {
                 PanoramaZoomControl(
                     zoom = panoramaZoom,
-                    rotation = rotation,
                     modifier =
                         Modifier
                             .align(Alignment.TopEnd)
@@ -245,15 +259,16 @@ private val ZoomInset = 12.dp
 
 /** iOS `pickers`: the style control always, the lens control only while a camera is live. The
  *  panorama's zoom is the other viewfinder's equivalent, and it lives on the canvas instead — see
- *  [PanoramaZoomControl]. */
+ *  [PanoramaZoomControl]. Stacked across the controls' own axis, as iOS's `axis.perpendicular`. */
 @Composable
 private fun Pickers(
     state: ComparisonState,
     dispatch: (ComparisonAction) -> Unit,
-    rotation: Float,
+    vertical: Boolean,
 ) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    AxisStack(vertical = vertical, spacing = 8.dp) {
         SegmentedControl(
+            vertical = vertical,
             items = ComparisonState.Style.entries,
             selected = state.style,
             onSelect = { dispatch(ComparisonAction.External.SetStyle(it)) },
@@ -261,13 +276,13 @@ private fun Pickers(
             Icon(
                 imageVector = style.icon,
                 contentDescription = stringResource(style.label),
-                modifier = Modifier.rotate(rotation),
             )
         }
 
         val lens = state.currentLens
         if (lens != null && state.showsLensPicker) {
             SegmentedControl(
+                vertical = vertical,
                 items = state.availableLens,
                 selected = lens,
                 onSelect = { dispatch(ComparisonAction.External.SetLens(it)) },
@@ -275,7 +290,6 @@ private fun Pickers(
                 Text(
                     text = item.title,
                     fontFamily = FontFamily.Monospace,
-                    modifier = Modifier.rotate(rotation),
                 )
             }
         }
@@ -292,7 +306,6 @@ private fun Pickers(
 @Composable
 private fun PanoramaZoomControl(
     zoom: PanoramaZoom,
-    rotation: Float,
     modifier: Modifier = Modifier,
 ) {
     StepperControl(
@@ -312,7 +325,6 @@ private fun PanoramaZoomControl(
                     onClick = { zoom.step(-PanoramaZoom.ZOOM_STEP) },
                 ),
             ),
-        glyphModifier = Modifier.rotate(rotation),
     )
 }
 
@@ -334,23 +346,32 @@ private val ComparisonState.showsLensPicker: Boolean
             captureState is ComparisonState.CaptureState.Viewfinder &&
             availableLens.size > 1
 
-/** iOS `bottomControls`: back and (once there is a shot) share at the edges, shutter between
- *  them. */
+/** iOS `bottomControls`: back and (once there is a shot) share at the ends, shutter between
+ *  them — a row under the canvas, a column beside it. */
 @Composable
 private fun BottomControls(
     state: ComparisonState,
     dispatch: (ComparisonAction) -> Unit,
     onDismiss: () -> Unit,
+    vertical: Boolean,
 ) {
     val taken = state.captureState is ComparisonState.CaptureState.Taken
     // Centred, because iOS's `ZStack` centres: the row of 48dp buttons is shorter than the 80dp
     // shutter it sits beside, and Compose's default `TopStart` would leave the two off by the
     // 16dp difference in their halves.
-    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = ControlsInset),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+    Box(
+        if (vertical) Modifier.fillMaxHeight() else Modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center,
+    ) {
+        AxisStack(
+            vertical = vertical,
+            modifier =
+                if (vertical) {
+                    Modifier.fillMaxHeight().padding(vertical = ControlsInset)
+                } else {
+                    Modifier.fillMaxWidth().padding(horizontal = ControlsInset)
+                },
+            spaceBetween = true,
         ) {
             OverlayIconButton(
                 icon = Icons.AutoMirrored.Rounded.ArrowBack,
@@ -456,14 +477,30 @@ private val ComparisonState.Style.label: Int
         }
 
 /**
- * iOS `Orientation.rotationAngle`: how far the glyphs turn back so they stay upright while the
- * screen itself does not rotate.
+ * iOS `AxisStack`: a column or a row of the same children, centred across the other axis. With
+ * [spaceBetween] the children are pushed to the ends (iOS puts a `Spacer()` between them).
  */
-private val Orientation.rotationAngle: Float
-    get() =
-        when (this) {
-            Orientation.Portrait -> 0f
-            Orientation.LandscapeLeft -> 90f
-            Orientation.LandscapeRight -> -90f
-            Orientation.UpsideDown -> 180f
-        }
+@Composable
+private fun AxisStack(
+    vertical: Boolean,
+    modifier: Modifier = Modifier,
+    spacing: Dp = 0.dp,
+    spaceBetween: Boolean = false,
+    content: @Composable () -> Unit,
+) {
+    if (vertical) {
+        Column(
+            modifier = modifier,
+            verticalArrangement =
+                if (spaceBetween) Arrangement.SpaceBetween else Arrangement.spacedBy(spacing),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) { content() }
+    } else {
+        Row(
+            modifier = modifier,
+            horizontalArrangement =
+                if (spaceBetween) Arrangement.SpaceBetween else Arrangement.spacedBy(spacing),
+            verticalAlignment = Alignment.CenterVertically,
+        ) { content() }
+    }
+}

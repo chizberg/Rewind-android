@@ -25,8 +25,7 @@ import com.chizberg.rewind.core.util.Haptics
  * the five iOS call sites are inside reducers built by [AppGraph], outside composition entirely
  * (settings' scheme change, the favorite toggle, the "no app can open this route" branch), so a
  * composition-scoped facade could not reach them. Instead the graph owns one long-lived instance
- * and [HapticsHost] lends it the current view for as long as the composition lives — the same shape
- * as [OrientationLockHost] borrowing the Activity. The reference is dropped on dispose, so the
+ * and [HapticsHost] lends it the current view for as long as the composition lives. The reference is dropped on dispose, so the
  * graph (which outlives activity recreation) never holds a stale view.
  */
 class AndroidHaptics : Haptics {

@@ -1,25 +1,35 @@
 package com.chizberg.rewind.features.comparison.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 
 /**
@@ -40,6 +50,9 @@ private const val INACTIVE_ALPHA = 0.7f
  * Nativized, per the design pack: M3's [SingleChoiceSegmentedButtonRow] supplies the selection,
  * which drops iOS's sliding `matchedGeometryEffect` capsule (a deliberate loss — the stock
  * component's selected fill says the same thing) and keeps the amber it says it with.
+ *
+ * [vertical] is iOS's `axis` (the controls standing beside a wide canvas). M3 has no vertical
+ * segmented row, so that one is drawn by hand in the same colours — see [VerticalSegmentedControl].
  */
 @Composable
 fun <T> SegmentedControl(
@@ -47,8 +60,13 @@ fun <T> SegmentedControl(
     selected: T,
     onSelect: (T) -> Unit,
     modifier: Modifier = Modifier,
+    vertical: Boolean = false,
     content: @Composable (item: T, isSelected: Boolean) -> Unit,
 ) {
+    if (vertical) {
+        VerticalSegmentedControl(items, selected, onSelect, modifier, content)
+        return
+    }
     val colors =
         SegmentedButtonDefaults.colors(
             activeContainerColor = MaterialTheme.colorScheme.secondaryContainer,
@@ -76,6 +94,67 @@ fun <T> SegmentedControl(
     }
 }
 
+/**
+ * A column of segments in [SegmentedControl]'s colours: one bordered pill, the picked segment
+ * filled. Each segment is a radio button to a screen reader, as the stock row's are.
+ */
+@Composable
+private fun <T> VerticalSegmentedControl(
+    items: List<T>,
+    selected: T,
+    onSelect: (T) -> Unit,
+    modifier: Modifier,
+    content: @Composable (item: T, isSelected: Boolean) -> Unit,
+) {
+    Surface(
+        modifier = modifier.width(IntrinsicSize.Max),
+        shape = RoundedCornerShape(percent = 50),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        border =
+            BorderStroke(
+                SegmentedButtonDefaults.BorderWidth,
+                MaterialTheme.colorScheme.outlineVariant,
+            ),
+    ) {
+        Column(Modifier.selectableGroup()) {
+            items.forEach { item ->
+                val isSelected = item == selected
+                Box(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .defaultMinSize(minWidth = SegmentMinSize, minHeight = SegmentMinSize)
+                            .background(
+                                if (isSelected) {
+                                    MaterialTheme.colorScheme.secondaryContainer
+                                } else {
+                                    Color.Transparent
+                                },
+                            ).selectable(
+                                selected = isSelected,
+                                role = Role.RadioButton,
+                                onClick = { onSelect(item) },
+                            ).padding(horizontal = SegmentPadding),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CompositionLocalProvider(
+                        LocalContentColor provides
+                            if (isSelected) {
+                                SelectedAmber
+                            } else {
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = INACTIVE_ALPHA)
+                            },
+                    ) { content(item, isSelected) }
+                }
+            }
+        }
+    }
+}
+
+/** The stock segmented button's height, and room for a glyph on either side of it. */
+private val SegmentMinSize = 48.dp
+private val SegmentPadding = 12.dp
+
 /** A square step, sized like the touch target it is rather than like a segment: this control floats
  *  over imagery instead of sitting in the row of pickers. */
 private val StepSize = 48.dp
@@ -98,7 +177,6 @@ private const val DISABLED_ALPHA = 0.3f
 fun StepperControl(
     steps: List<StepperStep>,
     modifier: Modifier = Modifier,
-    glyphModifier: Modifier = Modifier,
 ) {
     Surface(
         modifier = modifier.width(StepSize),
@@ -126,7 +204,6 @@ fun StepperControl(
                     Icon(
                         imageVector = step.icon,
                         contentDescription = step.contentDescription,
-                        modifier = glyphModifier,
                         tint =
                             MaterialTheme.colorScheme.onSurface.copy(
                                 alpha = if (step.enabled) INACTIVE_ALPHA else DISABLED_ALPHA,

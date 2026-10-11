@@ -12,7 +12,6 @@ import com.chizberg.rewind.features.details.ImageSaver
 import com.chizberg.rewind.features.details.pastVuUrl
 import com.chizberg.rewind.network.Remote
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -51,9 +50,9 @@ class ComparisonViewDeps(
     private val onClose: () -> Unit = {},
 ) {
     /**
-     * Releases everything this presentation owns — the orientation sensor subscription above all,
-     * plus any effect still in flight. iOS needs no such call: its model, tracker and session are
-     * all released with the dismissed screen. Ours hang off a scope, and a screen that is closed
+     * Releases everything this presentation owns — the camera events subscription and any effect
+     * still in flight. iOS needs no such call: its model and session are released with the
+     * dismissed screen. Ours hang off a scope, and a screen that is closed
      * has to hand it back (see the details reducer's `comparison(.dismiss)`).
      */
     fun close() {
@@ -79,6 +78,12 @@ class ComparisonRenderer {
     var viewfinder: (suspend () -> CapturedImage)? = null
 }
 
+/** iOS: two 4:3 halves stacked. */
+const val SIDE_BY_SIDE_ASPECT_RATIO = 4f / 6f
+
+/** What the cards are shaped as until the old photo is decoded — iOS `CardOnCardView`'s own 3:4. */
+const val DEFAULT_OLD_IMAGE_ASPECT_RATIO = 3f / 4f
+
 /**
  * State of one comparison screen. Port of iOS `ComparisonState`.
  *
@@ -97,7 +102,11 @@ data class ComparisonState(
     val captureMode: CaptureMode,
     val style: Style = Style.SideBySide,
     val captureState: CaptureState? = null,
-    val orientation: Orientation = Orientation.Portrait,
+    /**
+     * The old photo's width / height, once Coil has decoded it (iOS reads `oldUIImage.size`; ours
+     * has no bitmap in state, so the view reports it — [ComparisonAction.External.OldImageSizeLoaded]).
+     */
+    val oldImageAspectRatio: Float = DEFAULT_OLD_IMAGE_ASPECT_RATIO,
     val alert: AlertParams? = null,
     val streetViewAvailability: StreetViewAvailability? = null,
     /** iOS's one channel for closing itself: the parent watches it (see the screen). */
@@ -108,6 +117,16 @@ data class ComparisonState(
     val availableLens: List<Lens> = emptyList(),
 ) {
     enum class Style { SideBySide, CardOnCard }
+
+    /** iOS `aspectRatio(style:oldImage:)` — the canvas's shape, which the screen lays out around:
+     *  beside the controls when the screen is wider than this, above them otherwise. Stored on iOS,
+     *  derived here so the two inputs cannot drift from it. */
+    val aspectRatio: Float
+        get() =
+            when (style) {
+                Style.SideBySide -> SIDE_BY_SIDE_ASPECT_RATIO
+                Style.CardOnCard -> oldImageAspectRatio
+            }
 
     /** Fixed by whoever opened the screen; never switched from inside it. */
     enum class CaptureMode { Camera, StreetView }
@@ -126,6 +145,11 @@ sealed interface ComparisonAction {
     sealed interface External : ComparisonAction {
         data class SetStyle(
             val style: ComparisonState.Style,
+        ) : External
+
+        /** Android-only: the old photo has been decoded (see [ComparisonState.oldImageAspectRatio]). */
+        data class OldImageSizeLoaded(
+            val aspectRatio: Float,
         ) : External
 
         data object Shoot : External
@@ -188,10 +212,6 @@ sealed interface ComparisonAction {
 
         data object ImageSaved : Internal
 
-        data class OrientationChanged(
-            val orientation: Orientation,
-        ) : Internal
-
         data class StreetViewAvailabilityLoaded(
             val availability: StreetViewAvailability,
         ) : Internal
@@ -205,9 +225,7 @@ sealed interface ComparisonAction {
  *
  * Everything platform-shaped is injected, as in M12/M13.5: the [cameraSession] (CameraX, and null
  * in Street View mode — iOS's `cameraSession` is likewise an optional it never fills there), the
- * [renderer] the view fills in with its snapshots, the device [orientation] signal (iOS's
- * `OrientationTracker`, fed in through `adding` exactly like its `.adding(signal:)`), and the
- * gallery / share sheet lambdas.
+ * [renderer] the view fills in with its snapshots, and the gallery / share sheet lambdas.
  *
  * [streetViewAvailability] arrives already bound to this photo's coordinate, mirroring iOS's
  * `streetViewAvailability.mapArgs { modelImage.coordinate }` at the call site.
@@ -229,7 +247,6 @@ fun makeComparisonModel(
     streetViewAvailability: Remote<Unit, StreetViewAvailability>,
     cameraSession: CameraSession?,
     renderer: ComparisonRenderer,
-    orientation: Flow<Orientation>,
     saveOldImage: ImageSaver,
     saveImage: CaptureSaver,
     shareImage: CaptureSharer,
@@ -242,6 +259,9 @@ fun makeComparisonModel(
     ) { state, action, effect, asyncEffect ->
         when (action) {
             is ComparisonAction.External.SetStyle -> state.copy(style = action.style)
+
+            is ComparisonAction.External.OldImageSizeLoaded ->
+                state.copy(oldImageAspectRatio = action.aspectRatio)
 
             ComparisonAction.External.Shoot -> {
                 // The counter goes up before anything is captured: it drives the blink, which
@@ -442,9 +462,6 @@ fun makeComparisonModel(
 
             ComparisonAction.Internal.ImageSaved -> state.copy(savesCount = state.savesCount + 1)
 
-            is ComparisonAction.Internal.OrientationChanged ->
-                state.copy(orientation = action.orientation)
-
             is ComparisonAction.Internal.StreetViewAvailabilityLoaded -> {
                 if (action.availability is StreetViewAvailability.Unavailable) {
                     asyncEffect(
@@ -477,16 +494,15 @@ fun makeComparisonModel(
                     }
                 }
         }
-    }.adding(orientation) { ComparisonAction.Internal.OrientationChanged(it) }
-        .adding(cameraSession?.events ?: emptyFlow()) { event ->
-            when (event) {
-                is CameraEvent.SessionReady ->
-                    ComparisonAction.Internal.SessionReady(event.lenses, event.mainLens)
+    }.adding(cameraSession?.events ?: emptyFlow()) { event ->
+        when (event) {
+            is CameraEvent.SessionReady ->
+                ComparisonAction.Internal.SessionReady(event.lenses, event.mainLens)
 
-                // iOS: a session that cannot be built shows the access alert.
-                is CameraEvent.Failed -> ComparisonAction.External.Alert.PresentAccessError
-            }
+            // iOS: a session that cannot be built shows the access alert.
+            is CameraEvent.Failed -> ComparisonAction.External.Alert.PresentAccessError
         }
+    }
 
 /** iOS asserts and throws `"Comparison VC is missing"` when its weak view handle is gone. */
 private suspend fun ComparisonRenderer.renderCanvas(): CapturedImage =

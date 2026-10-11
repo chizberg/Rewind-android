@@ -5,7 +5,6 @@ import com.chizberg.rewind.app.errorAlert
 import com.chizberg.rewind.core.redux.AsyncEffect
 import com.chizberg.rewind.core.redux.Reducer
 import com.chizberg.rewind.core.util.Haptics
-import com.chizberg.rewind.core.util.OrientationLock
 import com.chizberg.rewind.domain.Coordinate
 import com.chizberg.rewind.domain.ModelImage
 import com.chizberg.rewind.domain.ModelImageDetails
@@ -300,7 +299,6 @@ fun makeImageDetailsModel(
     // opens the screen (a reducer test) does not have to fabricate one. The graph always passes
     // both.
     makeComparison: ComparisonFactory = { _, _ -> error("No comparison factory was injected") },
-    setOrientationLock: (OrientationLock?) -> Unit = {},
     translate: Remote<TranslateParams, String>,
     // "Couldn't tell", the same as a description in an unrecognised language: a caller that never
     // shows the button (a reducer test) needs no ML Kit. The graph always passes the real one.
@@ -517,16 +515,14 @@ fun makeImageDetailsModel(
                 // the full-quality photo is in. Ours has no bitmap to gate on — Coil draws the old
                 // half from its path, showing the cached rendition until the big one lands — so
                 // the screen simply opens.
-                effect { setOrientationLock(OrientationLock.Portrait) }
                 state.copy(comparison = makeComparison(modelImage, action.mode))
             }
 
             ImageDetailsAction.Comparison.Dismiss -> {
                 val comparison = state.comparison
                 effect {
-                    setOrientationLock(null)
-                    // ARC does this on iOS: the dismissed screen takes its camera session and its
-                    // orientation tracker with it (see ComparisonViewDeps.close).
+                    // ARC does this on iOS: the dismissed screen takes its camera session with it
+                    // (see ComparisonViewDeps.close).
                     comparison?.close()
                 }
                 state.copy(comparison = null)
@@ -547,7 +543,6 @@ fun makeImageDetailsModel(
                         saveImage = saveImage,
                         shareImage = shareImage,
                         makeComparison = makeComparison,
-                        setOrientationLock = setOrientationLock,
                         translate = translate,
                         detectLanguage = detectLanguage,
                         appLanguage = appLanguage,
