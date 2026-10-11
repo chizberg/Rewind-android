@@ -21,11 +21,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Mirror of iOS `ImageDetailsModelTests`: the description-link routing. A link to a pastvu photo
+ * Mirror of iOS `ImageDetailsModelTests`. Description-link routing: a link to a pastvu photo
  * (`https://pastvu.com/p/<cid>`) recurses into a nested details screen loaded from the remote; any
  * other link (external host, or a non-photo pastvu path) is handed to the url opener. The routing
- * hinges on a branchy URL parse (host + `/p/` + integer cid) — worth pinning — while the raw
- * button/url string tables are not tested.
+ * hinges on a branchy URL parse (host + `/p/` + integer cid) — worth pinning. And details seeding:
+ * details already known when the model is built land in the initial state instead of arriving as a
+ * later update. The raw button/url string tables are not tested.
  */
 class ImageDetailsModelTest {
     /**
@@ -84,6 +85,49 @@ class ImageDetailsModelTest {
             assertEquals(listOf(userPage), harness.openedUrls)
             assertNull(model.state.value.anotherImageModel)
             assertTrue(harness.requestedCids.isEmpty())
+        }
+
+    /**
+     * Mirror of iOS `knownDetailsSeedInitialState`. Details known upfront are part of the very
+     * first state, and presenting the screen doesn't ask for them again. Android-specific stake:
+     * the translation verdict is the detector's round trip here (not part of `apply` as on iOS), so
+     * a seeded screen must still run it on presentation — or the translate chip never shows.
+     */
+    @Test
+    fun knownDetailsSeedInitialState() =
+        reducerTest { scope ->
+            val harness = Harness(scope)
+            val details = mockDetails(cid = 1, description = "Вулица Кастрычницкая")
+            val foreign =
+                LanguageDetector { DetectedLanguage(languageCode = "be", confidence = 1f) }
+            val seeded = harness.makeModel(cachedDetails = details, detectLanguage = foreign)
+            val loaded = harness.makeModel(detectLanguage = foreign)
+
+            assertEquals(details, seeded.state.value.details) // before anything is dispatched
+
+            seeded(ImageDetailsAction.WillBePresented)
+            loaded(ImageDetailsAction.Internal.DetailsLoaded(details))
+            advanceUntilIdle()
+
+            assertEquals(TranslationState.Available, seeded.state.value.translationState)
+            assertEquals(loaded.state.value.translationState, seeded.state.value.translationState)
+            assertTrue(harness.requestedCids.isEmpty()) // details were not refetched
+        }
+
+    /** Mirror of iOS `unknownDetailsAreLoadedOnPresentation`: without known details, presentation
+     * loads them. */
+    @Test
+    fun unknownDetailsAreLoadedOnPresentation() =
+        reducerTest { scope ->
+            val harness = Harness(scope)
+            val model = harness.makeModel()
+
+            assertNull(model.state.value.details)
+            model(ImageDetailsAction.WillBePresented)
+            advanceUntilIdle()
+
+            assertNotNull(model.state.value.details)
+            assertEquals(listOf(1), harness.requestedCids)
         }
 
     /**
@@ -163,6 +207,8 @@ private class Harness(
     fun makeModel(
         imageTitle: String = "",
         detailsDescription: String? = null,
+        cachedDetails: ModelImageDetails? = null,
+        detectLanguage: LanguageDetector = LanguageDetector { null },
         translate: Remote<TranslateParams, String> =
             Remote { TODO("this test dispatched .Translate without supplying a translate stub") },
     ): ImageDetailsModel =
@@ -173,6 +219,8 @@ private class Harness(
                     requestedCids += cid
                     mockDetails(cid, description = detailsDescription)
                 },
+            cachedDetails = cachedDetails,
+            detectLanguage = detectLanguage,
             openSource = "",
             isFavorite = { false },
             setFavorite = { _, _ -> },

@@ -39,6 +39,7 @@ import com.chizberg.rewind.features.onboarding.makeOnboardingViewModel
 import com.chizberg.rewind.features.search.makeSearchModel
 import com.chizberg.rewind.features.settings.SettingsState
 import com.chizberg.rewind.features.settings.makeSettingsViewModel
+import com.chizberg.rewind.network.ImageDetailsLoader
 import com.chizberg.rewind.network.RequestPerformer
 import com.chizberg.rewind.network.RewindRemotes
 import com.chizberg.rewind.network.invoke
@@ -105,19 +106,23 @@ class AppGraph(
             .decoderCoroutineContext(Dispatchers.Default.limitedParallelism(2))
             .build()
 
-    private val remotes =
-        RewindRemotes(
-            RequestPerformer(
-                okHttpRequestPerformer(
-                    OkHttpClient
-                        .Builder()
-                        // Only translation needs it; see the interceptor for why the other Google
-                        // endpoint doesn't.
-                        .addInterceptor(AndroidClientInterceptor(appContext))
-                        .build(),
-                ),
+    private val requestPerformer =
+        RequestPerformer(
+            okHttpRequestPerformer(
+                OkHttpClient
+                    .Builder()
+                    // Only translation needs it; see the interceptor for why the other Google
+                    // endpoint doesn't.
+                    .addInterceptor(AndroidClientInterceptor(appContext))
+                    .build(),
             ),
         )
+
+    /** iOS `ImageDetailsLoader`: the details remote reads through it, the details factory seeds
+     *  each new screen from it. */
+    private val imageDetailsLoader = ImageDetailsLoader(requestPerformer)
+
+    private val remotes = RewindRemotes(requestPerformer, imageDetailsLoader)
 
     /** Gallery / share sheet, both fed from [imageLoader]'s cache. */
     private val imageExport = ImageExport(appContext, imageLoader)
@@ -359,6 +364,7 @@ class AppGraph(
         makeImageDetailsModel(
             modelImage = image,
             remote = remotes.imageDetails,
+            cachedDetails = imageDetailsLoader.cached(image.cid),
             openSource = source,
             // The star reads/writes the shared favorites reducer through iOS's `isFavorite(_:)`
             // bimap store (cid membership + a toggle lifted to add/remove). Recreating the store per
@@ -466,6 +472,12 @@ class AppGraph(
         )
 
     init {
+        // Port of iOS `AppGraph`'s memory-warning observer: under memory pressure the cached image
+        // details go. (iOS clears its own image cache there too; Coil trims its memory cache on
+        // the same callbacks by itself.) The callback captures the loader only, not the graph.
+        appContext.registerComponentCallbacks(
+            MemoryPressureObserver(imageDetailsLoader::clearCache),
+        )
         // Port of iOS `AppGraph.init`'s last line, and it lands in the same place for the same
         // reason: the graph is built once per process. `RewindViewModel` holds it across activity
         // recreation, so a rotation — or any other configuration change — is not a launch. (An

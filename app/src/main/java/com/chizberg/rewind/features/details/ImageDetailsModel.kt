@@ -280,6 +280,10 @@ const val DESCRIPTION_LINK_SOURCE = "descriptionLink"
 fun makeImageDetailsModel(
     modelImage: ModelImage,
     remote: Remote<Int, ModelImageDetails>,
+    // iOS `cachedDetails`: details already known when the screen is built (the loader's cache, or
+    // the photo a description link has just loaded) land in the very first state, so the screen
+    // renders complete in its first frame and presenting it asks for nothing again.
+    cachedDetails: ModelImageDetails? = null,
     openSource: String,
     isFavorite: (ModelImage) -> Boolean,
     setFavorite: (ModelImage, Boolean) -> Unit,
@@ -322,26 +326,35 @@ fun makeImageDetailsModel(
                         ImageDetailsAction.Button.ViewOnWeb,
                         ImageDetailsAction.Button.Route,
                     ),
-            ),
+            ).let { initial -> cachedDetails?.let { initial.applying(it) } ?: initial },
         scope = scope,
     ) { state, action, effect, asyncEffect ->
         when (action) {
             ImageDetailsAction.WillBePresented -> {
-                asyncEffect(
-                    AsyncEffect.perform { send ->
-                        try {
-                            send(
-                                ImageDetailsAction.Internal.DetailsLoaded(
-                                    remote.load(modelImage.cid),
-                                ),
-                            )
-                        } catch (e: CancellationException) {
-                            throw e
-                        } catch (e: Exception) {
-                            send(present(errorAlert("Unable to load image info", e)))
-                        }
-                    },
-                )
+                val seeded = state.details
+                if (seeded == null) {
+                    asyncEffect(
+                        AsyncEffect.perform { send ->
+                            try {
+                                send(
+                                    ImageDetailsAction.Internal.DetailsLoaded(
+                                        remote.load(modelImage.cid),
+                                    ),
+                                )
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                send(present(errorAlert("Unable to load image info", e)))
+                            }
+                        },
+                    )
+                } else {
+                    // Seeded details skip the request, not the language verdict: iOS settles that
+                    // synchronously in `apply(details:to:)`, ours is the detector's round trip.
+                    seeded.description?.let {
+                        asyncEffect(detectDescriptionLanguage(it, detectLanguage))
+                    }
+                }
                 state
             }
 
@@ -519,11 +532,8 @@ fun makeImageDetailsModel(
                 val nested =
                     makeImageDetailsModel(
                         modelImage = extractModelImage(action.details),
-                        // Short-circuit the already-loaded details so the child's own load is free.
-                        remote =
-                            Remote { cid ->
-                                if (cid == action.details.cid) action.details else remote.load(cid)
-                            },
+                        remote = remote,
+                        cachedDetails = action.details,
                         openSource = action.source,
                         isFavorite = isFavorite,
                         setFavorite = setFavorite,
@@ -625,34 +635,10 @@ fun makeImageDetailsModel(
             // branch straight away (`.available` — moot, since the button hangs off the
             // description block that isn't there).
             is ImageDetailsAction.Internal.DetailsLoaded -> {
-                val description = action.details.description
-                if (description == null) {
-                    state.copy(
-                        details = action.details,
-                        translationState = TranslationState.Available,
-                    )
-                } else {
-                    asyncEffect(
-                        AsyncEffect.perform { send ->
-                            val language =
-                                try {
-                                    detectLanguage.detect(description)
-                                } catch (e: CancellationException) {
-                                    throw e
-                                } catch (
-                                    @Suppress("SwallowedException") e: Exception,
-                                ) {
-                                    // A detector that fell over knows as little as one that had no
-                                    // guess: iOS's nil branch, which offers the translation.
-                                    null
-                                }
-                            send(
-                                ImageDetailsAction.Internal.DescriptionLanguageDetected(language),
-                            )
-                        },
-                    )
-                    state.copy(details = action.details)
+                action.details.description?.let {
+                    asyncEffect(detectDescriptionLanguage(it, detectLanguage))
                 }
+                state.applying(action.details)
             }
 
             is ImageDetailsAction.Internal.DescriptionLanguageDetected -> {
@@ -743,6 +729,44 @@ private fun pastvuPhotoCid(url: String): Int? {
     if (segments.size != 2 || segments[0] != "p") return null
     return segments[1].toIntOrNull()
 }
+
+/**
+ * The synchronous half of iOS `apply(details:to:)`: the payload lands now; the translation verdict
+ * follows from [detectDescriptionLanguage]. A photo without a description takes iOS's else branch
+ * straight away (`.available` — moot, since the button hangs off the description block that isn't
+ * there).
+ */
+private fun ImageDetailsState.applying(details: ModelImageDetails): ImageDetailsState =
+    if (details.description == null) {
+        copy(details = details, translationState = TranslationState.Available)
+    } else {
+        copy(details = details)
+    }
+
+/**
+ * The asynchronous half of iOS `apply(details:to:)` — there `NLLanguageRecognizer` answers inline,
+ * here ML Kit answers through a task, so the verdict comes back as its own action.
+ */
+@Suppress("TooGenericExceptionCaught")
+private fun detectDescriptionLanguage(
+    description: String,
+    detectLanguage: LanguageDetector,
+): AsyncEffect<ImageDetailsAction> =
+    AsyncEffect.perform { send ->
+        val language =
+            try {
+                detectLanguage.detect(description)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (
+                @Suppress("SwallowedException") e: Exception,
+            ) {
+                // A detector that fell over knows as little as one that had no guess: iOS's nil
+                // branch, which offers the translation.
+                null
+            }
+        send(ImageDetailsAction.Internal.DescriptionLanguageDetected(language))
+    }
 
 private fun present(params: AlertParams?): ImageDetailsAction =
     ImageDetailsAction.Alert.Present(params)
