@@ -265,6 +265,8 @@ private fun mockDetails(
         username = "",
         file = "",
         dir = null,
+        watermarkHeight = 19,
+        contentHeight = 800,
     )
 
 /** Gives the reducer a scope on the test scheduler (not `backgroundScope`, which `advanceUntilIdle`

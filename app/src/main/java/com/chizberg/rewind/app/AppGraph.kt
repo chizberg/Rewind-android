@@ -11,6 +11,9 @@ import coil3.ImageLoader
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import com.chizberg.rewind.BuildConfig
 import com.chizberg.rewind.R
+import com.chizberg.rewind.colorization.ColorizationManifest
+import com.chizberg.rewind.colorization.ColorizationModelStore
+import com.chizberg.rewind.colorization.colorizationManifestRequest
 import com.chizberg.rewind.core.redux.Property
 import com.chizberg.rewind.core.redux.Reducer
 import com.chizberg.rewind.domain.ImageSorting
@@ -40,6 +43,7 @@ import com.chizberg.rewind.features.onboarding.makeOnboardingViewModel
 import com.chizberg.rewind.features.search.makeSearchModel
 import com.chizberg.rewind.features.settings.SettingsState
 import com.chizberg.rewind.features.settings.makeSettingsViewModel
+import com.chizberg.rewind.network.DownloadPerformer
 import com.chizberg.rewind.network.ImageDetailsLoader
 import com.chizberg.rewind.network.Remote
 import com.chizberg.rewind.network.RequestPerformer
@@ -127,6 +131,34 @@ class AppGraph(
 
     /** Gallery / share sheet, both fed from [imageLoader]'s cache. */
     private val imageExport = ImageExport(appContext, imageLoader)
+
+    /** iOS `remotes.colorizationManifest`: the model host's list, read by the store and the
+     *  picker. */
+    private val colorizationManifest =
+        Remote<Unit, ColorizationManifest> {
+            requestPerformer.perform(
+                colorizationManifestRequest(BuildConfig.COLORIZATION_MODELS_URL),
+            )
+        }
+
+    /** Port of iOS `ColorizationModelStore`. The graphs live in `noBackupFilesDir` — iOS marks its
+     *  directory `isExcludedFromBackup`; hundreds of megabytes the host serves again do not belong
+     *  in a backup. Downloads and unpacking go through the cache directory. */
+    private val colorizationModelStore =
+        ColorizationModelStore(
+            downloadPerformer =
+                DownloadPerformer(
+                    client = OkHttpClient(),
+                    temporaryDirectory = File(appContext.cacheDir, "downloads"),
+                    scope = scope,
+                ),
+            manifest = colorizationManifest,
+            baseUrl = BuildConfig.COLORIZATION_MODELS_URL,
+            modelsDirectory = File(appContext.noBackupFilesDir, "ColorizationModels"),
+            temporaryDirectory = File(appContext.cacheDir, "ColorizationModels"),
+            makeModel = { id, file -> makeOrtColorizationModel(appContext, id, file) },
+            scope = scope,
+        )
 
     private val urlOpener: (String) -> Unit = { url ->
         runCatching {
@@ -470,10 +502,16 @@ class AppGraph(
 
     init {
         // Port of iOS `AppGraph`'s memory-warning observer: under memory pressure the cached image
-        // details go. (iOS clears its own image cache there too; Coil trims its memory cache on
-        // the same callbacks by itself.) The callback captures the loader only, not the graph.
+        // details and the loaded colorization graph go. (iOS clears its own image cache there
+        // too; Coil trims its memory cache on the same callbacks by itself.) The callback captures
+        // the loader and the store only, not the graph.
+        val detailsLoader = imageDetailsLoader
+        val modelStore = colorizationModelStore
         appContext.registerComponentCallbacks(
-            MemoryPressureObserver(imageDetailsLoader::clearCache),
+            MemoryPressureObserver {
+                detailsLoader.clearCache()
+                modelStore.clearCache()
+            },
         )
         // Port of iOS `AppGraph.init`'s last line, and it lands in the same place for the same
         // reason: the graph is built once per process. `RewindViewModel` holds it across activity

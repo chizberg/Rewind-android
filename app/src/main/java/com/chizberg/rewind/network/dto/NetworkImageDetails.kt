@@ -26,6 +26,11 @@ data class NetworkImageDetails(
     val address: String? = null,
     val author: String? = null,
     val watersignText: String? = null,
+    /** Height of the original image, without the watermark strip PastVu stitches under it. */
+    val h: Int,
+    /** Height of that strip at the original size. Both required, as on iOS: colorization cuts the
+     *  strip off by them. */
+    val waterh: Int,
     val user: NetworkUser,
 )
 

@@ -27,6 +27,7 @@ datastorePreferencesCore = "1.2.1"
 camerax = "1.6.1"
 mlkitLanguageId = "17.0.6"
 playReview = "2.0.2"
+onnxruntime = "1.22.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -73,6 +74,9 @@ mlkit-language-id = { group = "com.google.mlkit", name = "language-id", version.
 # review-ktx pulls `com.google.android.play:review` in transitively and adds the two suspend
 # wrappers over its Task API (`requestReview` / `launchReview`).
 play-review-ktx = { group = "com.google.android.play", name = "review-ktx", version.ref = "playReview" }
+# ONNX Runtime for the two colorization graphs (CPU; the graphs are exported in
+# tools/colorization).
+onnxruntime-android = { group = "com.microsoft.onnxruntime", name = "onnxruntime-android", version.ref = "onnxruntime" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

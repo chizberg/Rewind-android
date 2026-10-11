@@ -13,6 +13,8 @@ import com.chizberg.rewind.colorization.stages.Levels
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
 /**
  * A model that turns the prepared gray frame into color. Port of iOS `ColorizationModel`.
@@ -32,10 +34,14 @@ interface ColorizationModel {
 }
 
 /** iOS `ColorizationModelID`: the raw values are the manifest's and the settings' keys. */
+@Serializable
 enum class ColorizationModelId(
     val rawValue: String,
 ) {
+    @SerialName("ddcolor-large")
     DDColorLarge("ddcolor-large"),
+
+    @SerialName("eccv16")
     Eccv16("eccv16"),
     ;
 

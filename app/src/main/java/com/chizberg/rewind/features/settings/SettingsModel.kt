@@ -57,6 +57,11 @@ private const val REPO_URL = "https://github.com/chizberg/Rewind"
 /**
  * Builds the settings reducer. Port of iOS `makeSettingsViewModel`.
  *
+ * Each change is applied to the blob as it is persisted *now*, not to the screen's copy: the
+ * colorization picker opened from here writes the picked model straight into [settings], and a
+ * later toggle written from the stale copy would undo it (iOS mutates the stored value in place,
+ * `settings.value.x = …`, which has the same effect).
+ *
  * The screen is opened through a factory, so [settings] is read once at construction and the state
  * starts from whatever is persisted right now (iOS builds a fresh `SettingsViewModel` on every
  * `.present` for the same reason). Every state change is mirrored straight back into [settings] —
@@ -90,13 +95,13 @@ fun makeSettingsViewModel(
     ) { state, action, effect, _ ->
         when (action) {
             is SettingsAction.SetOpenClusterPreviews -> {
-                val stored = state.stored.copy(openClusterPreviews = action.value)
+                val stored = settings.value.copy(openClusterPreviews = action.value)
                 effect { settings.value = stored }
                 state.copy(stored = stored)
             }
 
             is SettingsAction.GradientSchemeSelected -> {
-                val stored = state.stored.copy(gradientScheme = action.scheme)
+                val stored = settings.value.copy(gradientScheme = action.scheme)
                 effect { haptics.selection() }
                 effect { settings.value = stored }
                 state.copy(stored = stored)

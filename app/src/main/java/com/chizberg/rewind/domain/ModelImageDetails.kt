@@ -21,6 +21,8 @@ data class ModelImageDetails(
     val username: String,
     val file: String,
     val dir: Direction?,
+    val watermarkHeight: Int,
+    val contentHeight: Int,
 ) {
     constructor(ni: NetworkImageDetails) : this(
         cid = ni.cid,
@@ -35,6 +37,8 @@ data class ModelImageDetails(
         username = extractUsername(ni),
         file = ni.file,
         dir = Direction.fromString(ni.dir),
+        watermarkHeight = ni.waterh,
+        contentHeight = ni.h,
     )
 }
 

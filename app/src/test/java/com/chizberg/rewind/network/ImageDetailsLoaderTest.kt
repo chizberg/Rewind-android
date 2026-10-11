@@ -77,6 +77,7 @@ private fun detailsJson(
     {"result": {"photo": {
       "cid": $cid, "file": "a/b/c.jpg", "title": "$title",
       "geo": [44.813047, 20.460579], "year": 1958, "year2": 1965,
+      "h": 800, "waterh": 21,
       "ldate": "2022-09-30T16:52:26.687Z", "user": {"disp": "Николай"}
     }}}
     """.trimIndent()
