@@ -114,17 +114,16 @@ class AppGraph(
             .decoderCoroutineContext(Dispatchers.Default.limitedParallelism(2))
             .build()
 
-    private val requestPerformer =
-        RequestPerformer(
-            okHttpRequestPerformer(
-                OkHttpClient
-                    .Builder()
-                    // Only translation needs it; see the interceptor for why the other Google
-                    // endpoint doesn't.
-                    .addInterceptor(AndroidClientInterceptor(appContext))
-                    .build(),
-            ),
-        )
+    /** One client for the process: one dispatcher, one connection pool. */
+    private val httpClient =
+        OkHttpClient
+            .Builder()
+            // Only translation needs it; see the interceptor for why the other Google endpoint
+            // doesn't.
+            .addInterceptor(AndroidClientInterceptor(appContext))
+            .build()
+
+    private val requestPerformer = RequestPerformer(okHttpRequestPerformer(httpClient))
 
     /** iOS `ImageDetailsLoader`: the details remote reads through it, the details factory seeds
      *  each new screen from it. */
@@ -171,7 +170,7 @@ class AppGraph(
         ColorizationModelStore(
             downloadPerformer =
                 DownloadPerformer(
-                    client = OkHttpClient(),
+                    client = httpClient,
                     temporaryDirectory = File(appContext.cacheDir, "downloads"),
                     scope = scope,
                 ),
