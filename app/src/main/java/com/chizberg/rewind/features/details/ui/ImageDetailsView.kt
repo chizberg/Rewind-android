@@ -751,7 +751,10 @@ private fun ActionButton(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Icon(button.icon(isFavorite, isImageSaved), contentDescription = null)
-            Text(button.label, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
+            // No line cap (iOS ee57003): a title too long even for a full-width row — a long
+            // translation in the narrow metadata column — wraps instead of being cut off, aligned
+            // to the leading edge (iOS f40e49c; Compose's default).
+            Text(button.label, style = MaterialTheme.typography.bodyLarge)
         }
     }
 }
