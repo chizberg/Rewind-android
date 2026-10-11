@@ -111,14 +111,30 @@ private class OrtLoader(
 
     private fun open(environment: OrtEnvironment): OrtSession {
         if (!file.exists()) throw IOException("The colorization model is not on disk any more")
-        val memory = ActivityManager.MemoryInfo()
-        context.getSystemService(ActivityManager::class.java).getMemoryInfo(memory)
-        if (memory.availMem < requiredMemory) {
+        val headroom = memoryHeadroom()
+        if (headroom < requiredMemory) {
             throw IOException(
-                "Not enough memory for colorization: ${memory.availMem / MEGABYTE} MB available",
+                "Not enough memory for colorization: ${headroom / MEGABYTE} MB available",
             )
         }
         return OrtSession.SessionOptions().use { environment.createSession(file.absolutePath, it) }
+    }
+
+    /**
+     * How much this process can still allocate before the system starts killing for memory — the
+     * Android reading of iOS `os_proc_available_memory`, which answers the same question against
+     * the app's jetsam limit. Android has no per-process limit for native memory (the session's
+     * weights are native, not Java heap); what ends an app that allocates too much is the
+     * low-memory killer, which steps in once the system's free memory falls to
+     * [ActivityManager.MemoryInfo.threshold]. So the room left is free memory above that line, not
+     * free memory as a whole (`availMem` alone counts the part the killer guards too). A system
+     * already at the line (`lowMemory`) has no room at all, whatever the subtraction says.
+     */
+    private fun memoryHeadroom(): Long {
+        val memory = ActivityManager.MemoryInfo()
+        context.getSystemService(ActivityManager::class.java).getMemoryInfo(memory)
+        if (memory.lowMemory) return 0
+        return (memory.availMem - memory.threshold).coerceAtLeast(0)
     }
 }
 
