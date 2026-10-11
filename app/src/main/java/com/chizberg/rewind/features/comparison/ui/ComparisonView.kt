@@ -48,10 +48,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImagePainter
 import com.chizberg.rewind.app.CapturedBitmap
+import com.chizberg.rewind.colorization.image.ArgbImage
 import com.chizberg.rewind.domain.ModelImage
 import com.chizberg.rewind.features.comparison.ComparisonState
 import com.chizberg.rewind.features.map.ui.RewindAsyncImage
 import com.chizberg.rewind.network.ImageQuality
+import com.chizberg.rewind.ui.toBitmap
 import java.time.LocalDate
 
 /** iOS `CardOnCardView.scale` / `.radius`. */
@@ -116,6 +118,7 @@ private const val WORDMARK = "Rewind <<"
 fun ComparisonView(
     style: ComparisonState.Style,
     oldImage: ModelImage,
+    oldColorized: ArgbImage?,
     captureState: ComparisonState.CaptureState?,
     streetViewYear: Int?,
     shotsCount: Int,
@@ -127,25 +130,39 @@ fun ComparisonView(
 ) {
     val currentYear = remember { LocalDate.now().year }
 
+    val colorizedBitmap = remember(oldColorized) { oldColorized?.toBitmap()?.asImageBitmap() }
+    LaunchedEffect(oldColorized) {
+        oldColorized?.let { onOldAspectLoaded(it.width.toFloat() / it.height) }
+    }
     val old: @Composable (Modifier) -> Unit = { innerModifier ->
-        RewindAsyncImage(
-            path = oldImage.imagePath,
-            contentDescription = oldImage.title,
-            modifier = innerModifier,
-            quality = ImageQuality.High,
-            contentScale = ContentScale.Crop,
-            placeholderQuality = ImageQuality.Medium,
-            onState = { state ->
-                (state as? AsyncImagePainter.State.Success)?.painter?.intrinsicSize?.let { size ->
+        if (colorizedBitmap != null) {
+            Image(
+                bitmap = colorizedBitmap,
+                contentDescription = oldImage.title,
+                modifier = innerModifier,
+                contentScale = ContentScale.Crop,
+            )
+        } else {
+            RewindAsyncImage(
+                path = oldImage.imagePath,
+                contentDescription = oldImage.title,
+                modifier = innerModifier,
+                quality = ImageQuality.High,
+                contentScale = ContentScale.Crop,
+                placeholderQuality = ImageQuality.Medium,
+                onState = { state ->
                     // iOS takes the card aspect from the decoded old image; ours learns it from
-                    // Coil when the photo lands (the reducer holds no bitmap) and hands it to the
-                    // state, which lays the screen out around it.
-                    if (size.width > 0f && size.height > 0f) {
-                        onOldAspectLoaded(size.width / size.height)
+                    // Coil when the photo lands (the reducer holds no bitmap) and hands it to
+                    // the state, which lays the screen out around it.
+                    val success = state as? AsyncImagePainter.State.Success
+                    success?.painter?.intrinsicSize?.let { size ->
+                        if (size.width > 0f && size.height > 0f) {
+                            onOldAspectLoaded(size.width / size.height)
+                        }
                     }
-                }
-            },
-        )
+                },
+            )
+        }
     }
     val new: @Composable (Modifier) -> Unit = { innerModifier ->
         NewFrame(captureState, viewfinder, innerModifier)

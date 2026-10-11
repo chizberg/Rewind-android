@@ -2,18 +2,28 @@ package com.chizberg.rewind.features.details
 
 import com.chizberg.rewind.app.AlertParams
 import com.chizberg.rewind.app.errorAlert
+import com.chizberg.rewind.colorization.ColorizationCheck
+import com.chizberg.rewind.colorization.ColorizationModel
+import com.chizberg.rewind.colorization.WatermarkedImage
+import com.chizberg.rewind.colorization.colorize
+import com.chizberg.rewind.colorization.image.ArgbImage
+import com.chizberg.rewind.colorization.isMonochrome
+import com.chizberg.rewind.colorization.splitWatermark
 import com.chizberg.rewind.core.redux.AsyncEffect
 import com.chizberg.rewind.core.redux.Reducer
 import com.chizberg.rewind.core.util.Haptics
 import com.chizberg.rewind.domain.Coordinate
 import com.chizberg.rewind.domain.ModelImage
 import com.chizberg.rewind.domain.ModelImageDetails
+import com.chizberg.rewind.features.colorization.ColorizationPickerModel
 import com.chizberg.rewind.features.comparison.ComparisonState
 import com.chizberg.rewind.features.comparison.ComparisonViewDeps
 import com.chizberg.rewind.network.Remote
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
 import java.net.URI
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -23,11 +33,13 @@ typealias UrlOpener = (String) -> Unit
 
 /**
  * Writes the photo to the device gallery. iOS hands its decoded `UIImage` to `PHPhotoLibrary`; ours
- * only names the image (the reducer holds no bitmap — the project-wide Coil divergence), and the app
- * layer pulls the pixels through the shared loader and inserts them into MediaStore. Throws on
- * failure, which the reducer turns into iOS's "Unable to save image" alert.
+ * names the image (the reducer holds no bitmap of the original — the project-wide Coil divergence),
+ * and the app layer pulls the pixels through the shared loader and inserts them into MediaStore —
+ * unless the second argument carries pixels of our own making (the colorized photo), which are
+ * saved as they are. Throws on failure, which the reducer turns into iOS's "Unable to save image"
+ * alert.
  */
-typealias ImageSaver = suspend (ModelImage) -> Unit
+typealias ImageSaver = suspend (ModelImage, ArgbImage?) -> Unit
 
 /** Hands the photo to the system share sheet. Port of iOS `makeShareVC` + its `.sheet`. */
 typealias ImageSharer = suspend (ShareContent) -> Unit
@@ -38,7 +50,15 @@ typealias ImageSharer = suspend (ShareContent) -> Unit
  * the graph, so the platform halves — CameraX, the orientation sensor, the gallery — stay out of
  * this JVM-only reducer.
  */
-typealias ComparisonFactory = (ModelImage, ComparisonState.CaptureMode) -> ComparisonViewDeps
+typealias ComparisonFactory =
+    (ModelImage, ComparisonState.CaptureMode, ArgbImage?) -> ComparisonViewDeps
+
+/**
+ * The photo's own pixels, full size, for colorization. iOS has them as the `UIImage` its loader
+ * hands the screen; ours come from Coil's cache once the view has shown the photo (see
+ * [ImageDetailsAction.ImageLoaded]).
+ */
+typealias PixelLoader = suspend (ModelImage) -> ArgbImage
 
 /**
  * What the share sheet carries. iOS passes four activity items (image, title, description, URL);
@@ -53,6 +73,8 @@ data class ShareContent(
     val title: String,
     val description: String?,
     val url: String,
+    /** The colorized photo when that is the one on screen — iOS shares `displayedImage`. */
+    val colorized: ArgbImage? = null,
 )
 
 /**
@@ -92,6 +114,34 @@ sealed interface TranslationState {
     ) : TranslationState
 }
 
+/** Port of iOS `ImageDetailsState.ColorizationState`. */
+sealed interface ColorizationState {
+    /** Which of the two photos is on screen once a colorized one exists. */
+    enum class Showing { Original, Colorized }
+
+    /** The photo or its details are not in yet. */
+    data object None : ColorizationState
+
+    data object Detecting : ColorizationState
+
+    /** The photo has color already: no button. */
+    data object NotAvailable : ColorizationState
+
+    data class Available(
+        val image: WatermarkedImage,
+    ) : ColorizationState
+
+    data class Colorizing(
+        val image: WatermarkedImage,
+    ) : ColorizationState
+
+    data class Ready(
+        val colorized: ArgbImage,
+        val showing: Showing,
+        val check: ColorizationCheck,
+    ) : ColorizationState
+}
+
 /** The image-details reducer. Port of iOS `ImageDetailsModel`. */
 typealias ImageDetailsModel = Reducer<ImageDetailsState, ImageDetailsAction>
 
@@ -113,9 +163,13 @@ data class ImageDetailsState(
     val isFavorite: Boolean,
     val actionButtons: List<ImageDetailsAction.Button>,
     val details: ModelImageDetails? = null,
-    /** iOS `imageSaveCount`: every save bumps it, so the fullscreen viewer's banner re-announces a
-     * second save; [isImageSaved] is derived from it, as on iOS. */
-    val imageSaveCount: Int = 0,
+    /** iOS `uiImage`: the photo's pixels, read once the view has shown it — only colorization
+     *  needs them; the screen itself draws through Coil. */
+    val pixels: ArgbImage? = null,
+    /** iOS `imageSaveCounts`: every save bumps the count of the version on screen, so the
+     *  fullscreen viewer's banner re-announces a second save, and saving the original does not
+     *  mark the colorized photo saved. [isImageSaved] is derived from it, as on iOS. */
+    val imageSaveCounts: Map<ColorizationState.Showing, Int> = emptyMap(),
     val loadingAnotherImage: Boolean = false,
     val mapOptionsPresented: Boolean = false,
     val fullscreenPresented: Boolean = false,
@@ -129,13 +183,58 @@ data class ImageDetailsState(
     /** Port of iOS `cachedTranslation`: survives "Show Original", spent only by a fresh
      * `makeImageDetailsModel` (a new screen instance). */
     val cachedTranslation: Translation? = null,
+    val colorizationState: ColorizationState = ColorizationState.None,
+    /** iOS `colorizationPicker`: the model picker, opened by a colorize tap without a model. */
+    val colorizationPicker: ColorizationPickerModel? = null,
 ) {
+    val displayedVersion: ColorizationState.Showing
+        get() {
+            val ready = colorizationState as? ColorizationState.Ready
+            return ready?.showing ?: ColorizationState.Showing.Original
+        }
+
+    val imageSaveCount: Int get() = imageSaveCounts[displayedVersion] ?: 0
+
     val isImageSaved: Boolean get() = imageSaveCount > 0
+
+    /** iOS `colorizedImage`: the colorized photo while it is the one on screen. */
+    val colorizedImage: ArgbImage?
+        get() {
+            val ready = colorizationState as? ColorizationState.Ready ?: return null
+            return ready.colorized.takeIf { ready.showing == ColorizationState.Showing.Colorized }
+        }
+
+    val isColorizing: Boolean get() = colorizationState is ColorizationState.Colorizing
 }
 
 sealed interface ImageDetailsAction {
     /** The screen is about to appear: kick off the details load. */
     data object WillBePresented : ImageDetailsAction
+
+    /**
+     * iOS `imageLoaded`: the full-quality photo is on screen. iOS's loader hands the bitmap over
+     * with it; ours is Coil's, so the reducer reads the pixels from the cache that load just
+     * filled — rather than starting a second download of the same photo next to the view's.
+     */
+    data object ImageLoaded : ImageDetailsAction
+
+    /** iOS `.colorize`: run the model on the photo, or switch between it and the result. */
+    data object Colorize : ImageDetailsAction
+
+    data object DismissColorizationCheck : ImageDetailsAction
+
+    sealed interface ColorizationPicker : ImageDetailsAction {
+        data object Present : ColorizationPicker
+
+        data object Dismiss : ColorizationPicker
+    }
+
+    /**
+     * The screen went away for good. iOS ties the colorization run to the model's lifetime
+     * (`tetheredEffects`); ours outlives the screen on the shared scope, so the view says when it
+     * is gone, and the run is cancelled.
+     */
+    data object Closed : ImageDetailsAction
 
     /** A link tapped inside the (HTML) description — recurse if it points at a pastvu photo,
      * otherwise open it in the browser. */
@@ -215,7 +314,27 @@ sealed interface ImageDetailsAction {
         /** Both save entry points (the action tile and the viewer's chrome) funnel through here. */
         data object SaveImage : Internal
 
-        data object ImageSaved : Internal
+        data class ImageSaved(
+            val version: ColorizationState.Showing,
+        ) : Internal
+
+        data class PixelsLoaded(
+            val pixels: ArgbImage,
+        ) : Internal
+
+        data class BwDetectionCompleted(
+            val isBw: Boolean,
+            val image: WatermarkedImage,
+        ) : Internal
+
+        data class ColorizationCompleted(
+            val colorized: ArgbImage,
+            val check: ColorizationCheck,
+        ) : Internal
+
+        data class ColorizationFailed(
+            val error: Throwable,
+        ) : Internal
 
         data class DetailsLoaded(
             val details: ModelImageDetails,
@@ -279,7 +398,7 @@ const val DESCRIPTION_LINK_SOURCE = "descriptionLink"
  * `Bundle.main.preferredLocalizations` inside this file; here the equivalent needs Android
  * resources, so the app layer resolves it and passes it in (see `AppGraph`).
  */
-@Suppress("TooGenericExceptionCaught", "LongParameterList")
+@Suppress("TooGenericExceptionCaught", "LongParameterList", "ThrowsCount")
 fun makeImageDetailsModel(
     modelImage: ModelImage,
     remote: Remote<Int, ModelImageDetails>,
@@ -298,17 +417,26 @@ fun makeImageDetailsModel(
     // The two comparison dependencies default to "there is no camera here", so a caller that never
     // opens the screen (a reducer test) does not have to fabricate one. The graph always passes
     // both.
-    makeComparison: ComparisonFactory = { _, _ -> error("No comparison factory was injected") },
+    makeComparison: ComparisonFactory = { _, _, _ -> error("No comparison factory was injected") },
     translate: Remote<TranslateParams, String>,
     // "Couldn't tell", the same as a description in an unrecognised language: a caller that never
     // shows the button (a reducer test) needs no ML Kit. The graph always passes the real one.
     detectLanguage: LanguageDetector = LanguageDetector { null },
     appLanguage: String = DEFAULT_APP_LANGUAGE,
     haptics: Haptics = Haptics.None,
+    // Colorization: the photo's pixels, the picked model (null when none is installed) and the
+    // picker for when it is not. A caller that never colorizes (a reducer test) needs none of them.
+    loadPixels: PixelLoader = { error("No pixel loader was injected") },
+    colorizationModel: () -> ColorizationModel? = { null },
+    makeColorizationPicker: (colorize: () -> Unit) -> ColorizationPickerModel = {
+        error("No colorization picker factory was injected")
+    },
     extractModelImage: (ModelImageDetails) -> ModelImage,
     scope: CoroutineScope,
-): ImageDetailsModel =
-    Reducer(
+): ImageDetailsModel {
+    // iOS `modelRef`: the picker's "Colorize" comes back into this reducer.
+    var modelRef: ImageDetailsModel? = null
+    return Reducer<ImageDetailsState, ImageDetailsAction>(
         initial =
             ImageDetailsState(
                 image = modelImage,
@@ -358,6 +486,86 @@ fun makeImageDetailsModel(
                         asyncEffect(detectDescriptionLanguage(it, detectLanguage))
                     }
                 }
+                state
+            }
+
+            ImageDetailsAction.ImageLoaded -> {
+                if (state.pixels == null) {
+                    asyncEffect(
+                        AsyncEffect.perform(PIXELS_EFFECT_ID) { send ->
+                            try {
+                                val pixels = loadPixels(modelImage)
+                                send(ImageDetailsAction.Internal.PixelsLoaded(pixels))
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (
+                                @Suppress("SwallowedException") e: Exception,
+                            ) {
+                                // No pixels, no colorize button: the photo itself is on screen.
+                            }
+                        },
+                    )
+                }
+                state
+            }
+
+            ImageDetailsAction.Colorize ->
+                when (val colorization = state.colorizationState) {
+                    is ColorizationState.Available -> {
+                        val colorizer = colorizationModel()
+                        if (colorizer == null) {
+                            asyncEffect(
+                                AsyncEffect.anotherAction(
+                                    action = ImageDetailsAction.ColorizationPicker.Present,
+                                ),
+                            )
+                            state
+                        } else {
+                            asyncEffect(colorizing(colorization.image, colorizer))
+                            state.copy(
+                                colorizationState =
+                                    ColorizationState.Colorizing(colorization.image),
+                            )
+                        }
+                    }
+
+                    is ColorizationState.Ready ->
+                        state.copy(colorizationState = colorization.toggled())
+
+                    ColorizationState.None,
+                    ColorizationState.Detecting,
+                    ColorizationState.NotAvailable,
+                    is ColorizationState.Colorizing,
+                    -> state
+                }
+
+            ImageDetailsAction.DismissColorizationCheck -> {
+                // iOS asserts on any other state: the banner only exists on a result.
+                val ready = state.colorizationState as? ColorizationState.Ready
+                if (ready == null) {
+                    state
+                } else {
+                    state.copy(colorizationState = ready.copy(check = ColorizationCheck.Ok))
+                }
+            }
+
+            ImageDetailsAction.ColorizationPicker.Present ->
+                if (state.colorizationPicker != null) {
+                    state
+                } else {
+                    state.copy(
+                        colorizationPicker =
+                            makeColorizationPicker {
+                                modelRef?.invoke(ImageDetailsAction.ColorizationPicker.Dismiss)
+                                modelRef?.invoke(ImageDetailsAction.Colorize)
+                            },
+                    )
+                }
+
+            ImageDetailsAction.ColorizationPicker.Dismiss -> state.copy(colorizationPicker = null)
+
+            ImageDetailsAction.Closed -> {
+                asyncEffect(AsyncEffect.cancel(COLORIZATION_EFFECT_ID))
                 state
             }
 
@@ -442,6 +650,7 @@ fun makeImageDetailsModel(
                                 title = state.image.title,
                                 description = state.details?.description,
                                 url = pastVuUrl(state.image.cid),
+                                colorized = state.colorizedImage,
                             )
                         asyncEffect(
                             AsyncEffect.perform { send ->
@@ -499,7 +708,9 @@ fun makeImageDetailsModel(
             is ImageDetailsAction.SetMapOptionsVisibility ->
                 state.copy(mapOptionsPresented = action.visible)
 
-            ImageDetailsAction.FullscreenPreview.Present -> state.copy(fullscreenPresented = true)
+            // iOS keeps the viewer shut while the model runs: the photo is about to change under it.
+            ImageDetailsAction.FullscreenPreview.Present ->
+                if (state.isColorizing) state else state.copy(fullscreenPresented = true)
 
             ImageDetailsAction.FullscreenPreview.Dismiss -> state.copy(fullscreenPresented = false)
 
@@ -515,7 +726,9 @@ fun makeImageDetailsModel(
                 // the full-quality photo is in. Ours has no bitmap to gate on — Coil draws the old
                 // half from its path, showing the cached rendition until the big one lands — so
                 // the screen simply opens.
-                state.copy(comparison = makeComparison(modelImage, action.mode))
+                state.copy(
+                    comparison = makeComparison(modelImage, action.mode, state.colorizedImage),
+                )
             }
 
             ImageDetailsAction.Comparison.Dismiss -> {
@@ -546,6 +759,10 @@ fun makeImageDetailsModel(
                         translate = translate,
                         detectLanguage = detectLanguage,
                         appLanguage = appLanguage,
+                        haptics = haptics,
+                        loadPixels = loadPixels,
+                        colorizationModel = colorizationModel,
+                        makeColorizationPicker = makeColorizationPicker,
                         extractModelImage = extractModelImage,
                         scope = scope,
                     )
@@ -608,11 +825,13 @@ fun makeImageDetailsModel(
 
             ImageDetailsAction.Internal.SaveImage -> {
                 val image = state.image
+                val colorized = state.colorizedImage
+                val version = state.displayedVersion
                 asyncEffect(
                     AsyncEffect.perform { send ->
                         try {
-                            saveImage(image)
-                            send(ImageDetailsAction.Internal.ImageSaved)
+                            saveImage(image, colorized)
+                            send(ImageDetailsAction.Internal.ImageSaved(version))
                         } catch (e: CancellationException) {
                             throw e
                         } catch (e: Exception) {
@@ -623,9 +842,52 @@ fun makeImageDetailsModel(
                 state
             }
 
-            ImageDetailsAction.Internal.ImageSaved -> {
+            is ImageDetailsAction.Internal.ImageSaved -> {
                 effect { haptics.success() }
-                state.copy(imageSaveCount = state.imageSaveCount + 1)
+                val count = (state.imageSaveCounts[action.version] ?: 0) + 1
+                state.copy(imageSaveCounts = state.imageSaveCounts + (action.version to count))
+            }
+
+            is ImageDetailsAction.Internal.PixelsLoaded ->
+                state
+                    .copy(pixels = action.pixels)
+                    .checkingColorizationAvailability(asyncEffect)
+
+            is ImageDetailsAction.Internal.BwDetectionCompleted ->
+                state.copy(
+                    colorizationState =
+                        if (action.isBw) {
+                            ColorizationState.Available(action.image)
+                        } else {
+                            ColorizationState.NotAvailable
+                        },
+                )
+
+            is ImageDetailsAction.Internal.ColorizationCompleted -> {
+                effect { haptics.success() }
+                state.copy(
+                    colorizationState =
+                        ColorizationState.Ready(
+                            colorized = action.colorized,
+                            showing = ColorizationState.Showing.Colorized,
+                            check = action.check,
+                        ),
+                )
+            }
+
+            is ImageDetailsAction.Internal.ColorizationFailed -> {
+                asyncEffect(
+                    AsyncEffect.anotherAction(
+                        action = present(errorAlert("Unable to colorize image", action.error)),
+                    ),
+                )
+                // Back to the button, so the tap can be retried.
+                val colorizing = state.colorizationState as? ColorizationState.Colorizing
+                if (colorizing == null) {
+                    state
+                } else {
+                    state.copy(colorizationState = ColorizationState.Available(colorizing.image))
+                }
             }
 
             // Port of iOS `apply(details:to:)`, split in two because the detector is asynchronous
@@ -637,7 +899,7 @@ fun makeImageDetailsModel(
                 action.details.description?.let {
                     asyncEffect(detectDescriptionLanguage(it, detectLanguage))
                 }
-                state.applying(action.details)
+                state.applying(action.details).checkingColorizationAvailability(asyncEffect)
             }
 
             is ImageDetailsAction.Internal.DescriptionLanguageDetected -> {
@@ -682,7 +944,65 @@ fun makeImageDetailsModel(
                 state.copy(translationState = TranslationState.Available)
             }
         }
+    }.also { modelRef = it }
+}
+
+/**
+ * Port of iOS `checkColorizationAvailability`: once both the photo's pixels and its details are in
+ * (either may land first), cut the watermark off by the heights PastVu reports and offer the button
+ * only for a photo that has no color yet.
+ */
+private fun ImageDetailsState.checkingColorizationAvailability(
+    asyncEffect: (AsyncEffect<ImageDetailsAction>) -> Unit,
+): ImageDetailsState {
+    if (colorizationState != ColorizationState.None) return this
+    val pixels = pixels ?: return this
+    val details = details ?: return this
+    asyncEffect(
+        AsyncEffect.perform { send ->
+            val image =
+                withContext(Dispatchers.Default) {
+                    splitWatermark(pixels, details.watermarkHeight, details.contentHeight)
+                }
+            val isBw = withContext(Dispatchers.Default) { isMonochrome(image.content) }
+            send(ImageDetailsAction.Internal.BwDetectionCompleted(isBw, image))
+        },
+    )
+    return copy(colorizationState = ColorizationState.Detecting)
+}
+
+/** The run itself. Port of the iOS `.colorize` effect: the model on the photo without its strip,
+ *  then the strip stitched back under the result. */
+@Suppress("TooGenericExceptionCaught")
+private fun colorizing(
+    image: WatermarkedImage,
+    model: ColorizationModel,
+): AsyncEffect<ImageDetailsAction> =
+    AsyncEffect.perform(COLORIZATION_EFFECT_ID) { send ->
+        try {
+            val result = colorize(image.content, model)
+            val stitched =
+                withContext(Dispatchers.Default) { image.withContent(result.image).stitched() }
+            send(ImageDetailsAction.Internal.ColorizationCompleted(stitched, result.check))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            send(ImageDetailsAction.Internal.ColorizationFailed(e))
+        }
     }
+
+/** iOS's `.ready` branch of `.colorize`: the other one of the two photos. */
+private fun ColorizationState.Ready.toggled(): ColorizationState.Ready =
+    copy(
+        showing =
+            when (showing) {
+                ColorizationState.Showing.Colorized -> ColorizationState.Showing.Original
+                ColorizationState.Showing.Original -> ColorizationState.Showing.Colorized
+            },
+    )
+
+private const val PIXELS_EFFECT_ID = "pixels"
+private const val COLORIZATION_EFFECT_ID = "colorization"
 
 /**
  * Both halves of a translation, fetched at once. Port of the two `async let`s in iOS's `.translate`

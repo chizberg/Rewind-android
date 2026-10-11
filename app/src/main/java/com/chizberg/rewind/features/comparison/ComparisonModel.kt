@@ -3,6 +3,7 @@ package com.chizberg.rewind.features.comparison
 import com.chizberg.rewind.app.AlertParams
 import com.chizberg.rewind.app.errorAlert
 import com.chizberg.rewind.app.infoAlert
+import com.chizberg.rewind.colorization.image.ArgbImage
 import com.chizberg.rewind.core.redux.AsyncEffect
 import com.chizberg.rewind.core.redux.Reducer
 import com.chizberg.rewind.core.util.Haptics
@@ -99,6 +100,9 @@ const val DEFAULT_OLD_IMAGE_ASPECT_RATIO = 3f / 4f
  */
 data class ComparisonState(
     val oldImage: ModelImage,
+    /** The colorized photo when that is the one the details screen was showing — iOS hands over
+     *  `displayedImage`. Null compares against the original, drawn by Coil from [oldImage]. */
+    val oldColorized: ArgbImage? = null,
     val captureMode: CaptureMode,
     val style: Style = Style.SideBySide,
     val captureState: CaptureState? = null,
@@ -244,6 +248,7 @@ sealed interface ComparisonAction {
 fun makeComparisonModel(
     captureMode: ComparisonState.CaptureMode,
     oldImage: ModelImage,
+    oldColorized: ArgbImage? = null,
     streetViewAvailability: Remote<Unit, StreetViewAvailability>,
     cameraSession: CameraSession?,
     renderer: ComparisonRenderer,
@@ -254,7 +259,12 @@ fun makeComparisonModel(
     scope: CoroutineScope,
 ): ComparisonModel =
     Reducer<ComparisonState, ComparisonAction>(
-        initial = ComparisonState(oldImage = oldImage, captureMode = captureMode),
+        initial =
+            ComparisonState(
+                oldImage = oldImage,
+                oldColorized = oldColorized,
+                captureMode = captureMode,
+            ),
         scope = scope,
     ) { state, action, effect, asyncEffect ->
         when (action) {
@@ -446,7 +456,7 @@ fun makeComparisonModel(
                     AsyncEffect.perform { send ->
                         try {
                             val comparison = renderer.renderCanvas()
-                            saveOldImage(oldImage)
+                            saveOldImage(oldImage, oldColorized)
                             saveImage(shot, CaptureKind.Shot)
                             saveImage(comparison, CaptureKind.Comparison)
                             send(ComparisonAction.Internal.ImageSaved)

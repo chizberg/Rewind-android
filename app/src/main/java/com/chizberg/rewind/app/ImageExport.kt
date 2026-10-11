@@ -16,11 +16,14 @@ import coil3.request.SuccessResult
 import coil3.request.allowHardware
 import coil3.size.Size
 import coil3.toBitmap
+import com.chizberg.rewind.colorization.image.ArgbImage
 import com.chizberg.rewind.domain.ModelImage
 import com.chizberg.rewind.features.comparison.CaptureKind
 import com.chizberg.rewind.features.details.ShareContent
 import com.chizberg.rewind.network.ImageQuality
 import com.chizberg.rewind.network.imageUrl
+import com.chizberg.rewind.ui.toArgbImage
+import com.chizberg.rewind.ui.toBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -58,8 +61,11 @@ class ImageExport(
      * written — so a failure halfway can't leave a zero-byte photo visible in the gallery. No
      * runtime permission is involved: MediaStore owns the row we created (minSdk 31).
      */
-    suspend fun save(image: ModelImage) {
-        save(load(image), fileName(image))
+    suspend fun save(
+        image: ModelImage,
+        colorized: ArgbImage? = null,
+    ) {
+        save(colorized?.toBitmap() ?: load(image), fileName(image, colorized != null))
     }
 
     /**
@@ -114,8 +120,8 @@ class ImageExport(
      */
     suspend fun share(content: ShareContent) {
         share(
-            bitmap = load(content.image),
-            fileName = fileName(content.image),
+            bitmap = content.colorized?.toBitmap() ?: load(content.image),
+            fileName = fileName(content.image, content.colorized != null),
             title = content.title,
             text = content.text(),
         )
@@ -160,6 +166,16 @@ class ImageExport(
     }
 
     /**
+     * The photo's pixels for colorization. iOS has them as the `UIImage` its loader hands the
+     * screen; ours are read back from the same full-quality request the view has just made, so it
+     * comes from the cache rather than over the network a second time.
+     */
+    suspend fun pixels(image: ModelImage): ArgbImage {
+        val bitmap = load(image)
+        return withContext(Dispatchers.Default) { bitmap.toArgbImage() }
+    }
+
+    /**
      * The photo at full quality, from the cache when it is there. Hardware bitmaps are turned off:
      * their pixels live in graphics memory, and both paths here have to read them back.
      */
@@ -184,7 +200,11 @@ private fun Bitmap.writeJpeg(stream: OutputStream) {
     }
 }
 
-private fun fileName(image: ModelImage): String = "pastvu_${image.cid}.jpg"
+/** The colorized photo gets a name of its own, so the original saved beside it is not renamed. */
+private fun fileName(
+    image: ModelImage,
+    colorized: Boolean = false,
+): String = if (colorized) "pastvu_${image.cid}_colorized.jpg" else "pastvu_${image.cid}.jpg"
 
 /** The comparison shot and composite of the same photo — sibling names, so they sit together with
  *  the old photo in the album. A second shot of the same photo becomes "… (1).jpg", MediaStore's

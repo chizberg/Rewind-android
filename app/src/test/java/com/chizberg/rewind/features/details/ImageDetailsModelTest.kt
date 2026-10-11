@@ -2,6 +2,16 @@
 
 package com.chizberg.rewind.features.details
 
+import com.chizberg.rewind.colorization.BlockingModel
+import com.chizberg.rewind.colorization.ColorizationCheck
+import com.chizberg.rewind.colorization.ColorizationModel
+import com.chizberg.rewind.colorization.ColorlessModel
+import com.chizberg.rewind.colorization.WatermarkedImage
+import com.chizberg.rewind.colorization.grayImage
+import com.chizberg.rewind.colorization.image.ABPlanes
+import com.chizberg.rewind.colorization.image.GrayPlane
+import com.chizberg.rewind.colorization.image.PlaneSize
+import com.chizberg.rewind.colorization.tinyPhoto
 import com.chizberg.rewind.domain.Coordinate
 import com.chizberg.rewind.domain.ImageDate
 import com.chizberg.rewind.domain.ModelImage
@@ -17,8 +27,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.IOException
 
 /**
  * Mirror of iOS `ImageDetailsModelTests`. Description-link routing: a link to a pastvu photo
@@ -187,7 +199,130 @@ class ImageDetailsModelTest {
             )
             assertEquals(2, translateCallCount) // no new network calls
         }
+
+    /**
+     * The model sees the photo without its watermark strip, and the strip comes back under the
+     * colorized result — a 2×2 photo over a 2×1 strip gives a 2×3 result from a 2×2 gray frame.
+     */
+    @Test
+    fun colorizeRunsTheModelOnTheContentAndKeepsTheResult() =
+        reducerTest { scope ->
+            val watermark = grayImage(width = 2, height = 1, values = listOf(40, 220))
+            val source = WatermarkedImage(content = tinyPhoto(), watermark = watermark)
+            val colorizationModel = ColorlessModel(claheClip = 1.0)
+            val model = Harness(scope).makeModel(colorizationModel = colorizationModel)
+            model(ImageDetailsAction.Internal.BwDetectionCompleted(isBw = true, image = source))
+
+            model(ImageDetailsAction.Colorize)
+            assertEquals(ColorizationState.Colorizing(source), model.state.value.colorizationState)
+
+            val state = model.state
+            assertTrue(eventually { state.value.colorizationState is ColorizationState.Ready })
+            val result = (model.state.value.colorizationState as ColorizationState.Ready).colorized
+            assertEquals(2, result.width)
+            assertEquals(3, result.height)
+            assertEquals(PlaneSize(2, 2), colorizationModel.receivedGray?.size)
+            assertNull(model.state.value.colorizationPicker)
+        }
+
+    @Test
+    fun colorizeOnTheResultTogglesTheOriginalWithoutRunningTheModel() =
+        reducerTest { scope ->
+            val colorized = tinyPhoto()
+            val model = Harness(scope).makeModel()
+            model(ImageDetailsAction.Internal.PixelsLoaded(tinyPhoto()))
+            model(ImageDetailsAction.Internal.ColorizationCompleted(colorized, OK))
+            assertEquals(
+                ColorizationState.Ready(colorized, ColorizationState.Showing.Colorized, OK),
+                model.state.value.colorizationState,
+            )
+            assertSame(colorized, model.state.value.colorizedImage)
+
+            model(ImageDetailsAction.Colorize)
+            assertEquals(
+                ColorizationState.Ready(colorized, ColorizationState.Showing.Original, OK),
+                model.state.value.colorizationState,
+            )
+            assertNull(model.state.value.colorizedImage)
+
+            model(ImageDetailsAction.Colorize)
+            assertEquals(
+                ColorizationState.Ready(colorized, ColorizationState.Showing.Colorized, OK),
+                model.state.value.colorizationState,
+            )
+            assertSame(colorized, model.state.value.colorizedImage)
+        }
+
+    @Test
+    fun savingTheOriginalDoesNotMarkTheColorizedPhotoSaved() =
+        reducerTest { scope ->
+            val model = Harness(scope).makeModel()
+            model(ImageDetailsAction.Internal.ImageSaved(ColorizationState.Showing.Original))
+            assertTrue(model.state.value.isImageSaved)
+
+            model(ImageDetailsAction.Internal.ColorizationCompleted(tinyPhoto(), OK))
+            assertFalse(model.state.value.isImageSaved)
+
+            model(ImageDetailsAction.Colorize)
+            assertTrue(model.state.value.isImageSaved)
+        }
+
+    /** iOS releases the model; ours outlives the screen on the shared scope, so the view says
+     *  `Closed` — either way the run stops at its next cancellation point. */
+    @Test
+    fun closingTheScreenCancelsTheRunningColorization() =
+        reducerTest { scope ->
+            val source = WatermarkedImage(content = tinyPhoto(), watermark = null)
+            val colorizationModel = BlockingModel()
+            val model = Harness(scope).makeModel(colorizationModel = colorizationModel)
+            model(ImageDetailsAction.Internal.BwDetectionCompleted(isBw = true, image = source))
+            model(ImageDetailsAction.Colorize)
+            assertTrue(eventually { colorizationModel.isPredicting.isCompleted })
+
+            model(ImageDetailsAction.Closed)
+            advanceUntilIdle()
+            colorizationModel.finishPrediction()
+
+            assertTrue(eventually { colorizationModel.wasCancelled })
+        }
+
+    @Test
+    fun failedColorizationRestoresTheButtonAndReportsTheError() =
+        reducerTest { scope ->
+            val source = WatermarkedImage(content = tinyPhoto(), watermark = null)
+            val model = Harness(scope).makeModel(colorizationModel = ThrowingColorizationModel())
+            model(ImageDetailsAction.Internal.BwDetectionCompleted(isBw = true, image = source))
+
+            model(ImageDetailsAction.Colorize)
+
+            assertTrue(eventually { model.state.value.alert != null })
+            assertEquals(ColorizationState.Available(source), model.state.value.colorizationState)
+        }
 }
+
+private class ThrowingColorizationModel : ColorizationModel {
+    override val claheClip = 1.0
+    override val boldness = 1f
+
+    override suspend fun predict(gray: GrayPlane): ABPlanes = throw IOException("no color")
+}
+
+/**
+ * iOS `eventually`: the pipeline runs on the default dispatcher, off the test scheduler, so the
+ * test both drains its own scheduler and waits in real time for the result to come back.
+ */
+private fun TestScope.eventually(condition: () -> Boolean): Boolean {
+    repeat(EVENTUALLY_ATTEMPTS) {
+        advanceUntilIdle()
+        if (condition()) return true
+        Thread.sleep(EVENTUALLY_POLL_MS)
+    }
+    return false
+}
+
+private val OK = ColorizationCheck.Ok
+private const val EVENTUALLY_ATTEMPTS = 500
+private const val EVENTUALLY_POLL_MS = 10L
 
 private class Harness(
     private val scope: CoroutineScope,
@@ -211,6 +346,7 @@ private class Harness(
         detectLanguage: LanguageDetector = LanguageDetector { null },
         translate: Remote<TranslateParams, String> =
             Remote { TODO("this test dispatched .Translate without supplying a translate stub") },
+        colorizationModel: ColorizationModel? = null,
     ): ImageDetailsModel =
         makeImageDetailsModel(
             modelImage = mockImage(cid = 1, title = imageTitle),
@@ -227,9 +363,10 @@ private class Harness(
             showOnMap = {},
             canOpenUrl = { true },
             urlOpener = { openedUrls += it },
-            saveImage = {},
+            saveImage = { _, _ -> },
             shareImage = {},
             translate = translate,
+            colorizationModel = { colorizationModel },
             extractModelImage = { details -> mockImage(cid = details.cid) },
             scope = scope,
         )

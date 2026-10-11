@@ -217,6 +217,7 @@ private fun ComparisonCanvas(
             ComparisonView(
                 style = state.style,
                 oldImage = state.oldImage,
+                oldColorized = state.oldColorized,
                 captureState = state.captureState,
                 streetViewYear = state.streetViewAvailability.year,
                 shotsCount = state.shotsCount,

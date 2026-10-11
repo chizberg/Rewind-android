@@ -5,6 +5,8 @@ import com.chizberg.rewind.colorization.image.ArgbImage
 import com.chizberg.rewind.colorization.image.GrayPlane
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 
 /** iOS `ColorlessModel`: predicts no color at all and remembers the frame it was handed. */
@@ -57,9 +59,15 @@ class BlockingModel : ColorizationModel {
     val isPredicting = CompletableDeferred<Unit>()
     private val release = CompletableDeferred<Unit>()
 
+    /** Whether the run had been cancelled by the time the prediction was released. */
+    @Volatile
+    var wasCancelled = false
+        private set
+
     override suspend fun predict(gray: GrayPlane): ABPlanes {
         isPredicting.complete(Unit)
         withContext(NonCancellable) { release.await() }
+        wasCancelled = !currentCoroutineContext().isActive
         return ABPlanes(
             gray.size,
             FloatArray(gray.size.pixelCount),

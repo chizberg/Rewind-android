@@ -356,7 +356,7 @@ class AppGraph(
      * snapshots with, and a fresh orientation sensor subscription. The availability remote is bound
      * to this photo's coordinate right here, mirroring iOS's `.mapArgs { modelImage.coordinate }`.
      */
-    private val comparisonFactory: ComparisonFactory = { image, mode ->
+    private val comparisonFactory: ComparisonFactory = { image, mode, colorized ->
         val renderer = ComparisonRenderer()
         val cameraSession =
             when (mode) {
@@ -373,6 +373,7 @@ class AppGraph(
                 makeComparisonModel(
                     captureMode = mode,
                     oldImage = image,
+                    oldColorized = colorized,
                     // iOS guards a photo without coordinates here (the button is hidden for it, so
                     // this is never reached) and answers `.unavailable`.
                     streetViewAvailability =
@@ -436,6 +437,12 @@ class AppGraph(
             saveImage = imageExport::save,
             shareImage = imageExport::share,
             makeComparison = comparisonFactory,
+            loadPixels = imageExport::pixels,
+            // Read on every tap, like iOS's `Variable`: a model picked or deleted meanwhile counts.
+            colorizationModel = {
+                settings.value.colorizationModel?.let(colorizationModelStore::localModel)
+            },
+            makeColorizationPicker = { colorize -> makeColorizationPicker(colorize) },
             translate = remotes.translate,
             detectLanguage = languageDetector,
             haptics = haptics,
