@@ -6,9 +6,9 @@ package com.chizberg.rewind
  * across both repos.
  */
 object Fixture {
-    fun text(name: String): String =
+    fun text(name: String): String = stream(name).bufferedReader().use { it.readText() }
+
+    fun stream(name: String): java.io.InputStream =
         Fixture::class.java.classLoader!!
             .getResourceAsStream("fixtures/$name")!!
-            .bufferedReader()
-            .use { it.readText() }
 }
