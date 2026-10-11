@@ -11,6 +11,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
 import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.Job as CoroutineJob
 
 /** Port of iOS `ColorizationFileState`. */
 sealed interface ColorizationFileState {
@@ -110,6 +111,7 @@ class ColorizationModelStore(
         val task =
             scope.launch {
                 var transfer: Job<DownloadPerformer.Progress, File>? = null
+                var mirroring: CoroutineJob? = null
                 try {
                     val entry = manifest.load(Unit).entry(id)
                     val started =
@@ -117,7 +119,7 @@ class ColorizationModelStore(
                             colorizationModelDownload(entry, baseUrl, temporaryDirectory),
                         )
                     transfer = started
-                    val mirroring =
+                    mirroring =
                         launch {
                             started.state.collect { if (it is Job.State.Running) state.value = it }
                         }
@@ -131,6 +133,9 @@ class ColorizationModelStore(
                 } catch (e: Exception) {
                     state.value = Job.State.Finished(Result.failure(e))
                 } finally {
+                    // The mirror collects a StateFlow, which never completes: on a failure it
+                    // would keep this coroutine alive for good.
+                    mirroring?.cancel()
                     jobs.remove(id)
                 }
             }
