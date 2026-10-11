@@ -185,7 +185,7 @@ class DownloadPerformer(
                         call: Call,
                         response: Response,
                     ) {
-                        continuation.resume(response)
+                        continuation.resume(response) { _, value, _ -> value.close() }
                     }
                 },
             )
