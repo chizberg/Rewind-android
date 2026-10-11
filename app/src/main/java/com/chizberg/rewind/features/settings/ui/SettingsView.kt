@@ -20,6 +20,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.MailOutline
 import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -54,8 +55,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chizberg.rewind.R
 import com.chizberg.rewind.domain.GradientScheme
+import com.chizberg.rewind.features.colorization.ui.ColorizationPickerScreen
 import com.chizberg.rewind.features.settings.SettingsAction
 import com.chizberg.rewind.features.settings.SettingsModel
+import com.chizberg.rewind.ui.Overlay
 import com.chizberg.rewind.ui.toComposeColor
 
 /**
@@ -125,6 +128,16 @@ fun SettingsView(
             }
 
             item {
+                Section(header = R.string.image_colorization) {
+                    LinkRow(
+                        title = stringResource(R.string.colorization_model),
+                        icon = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                        onClick = { model(SettingsAction.ColorizationPicker.Present) },
+                    )
+                }
+            }
+
+            item {
                 Section(header = R.string.settings_section_gradient_picker) {
                     GradientSchemePicker(
                         selected = state.stored.gradientScheme,
@@ -178,6 +191,17 @@ fun SettingsView(
                 }
             }
         }
+    }
+
+    // iOS pushes the picker in the settings' navigation stack; here it is the next overlay layer.
+    Overlay(
+        target = state.colorizationPicker,
+        onBack = { model(SettingsAction.ColorizationPicker.Dismiss) },
+    ) { picker ->
+        ColorizationPickerScreen(
+            model = picker,
+            onDismiss = { model(SettingsAction.ColorizationPicker.Dismiss) },
+        )
     }
 }
 

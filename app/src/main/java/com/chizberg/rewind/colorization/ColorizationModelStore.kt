@@ -54,6 +54,12 @@ class ColorizationModelStore(
      */
     private var loadedModel: Pair<ColorizationModelId, ColorizationModel>? = null
 
+    init {
+        // An unpack the process did not survive leaves a graph-sized file behind; no download is
+        // running yet, so whatever is there is such a leftover.
+        scope.launch(Dispatchers.IO) { temporaryDirectory.listFiles()?.forEach { it.delete() } }
+    }
+
     fun fileState(id: ColorizationModelId): ColorizationFileState =
         when (val state = jobs[id]?.state?.value) {
             is Job.State.Running ->

@@ -4,6 +4,7 @@ import com.chizberg.rewind.core.redux.Property
 import com.chizberg.rewind.core.redux.Reducer
 import com.chizberg.rewind.core.util.Haptics
 import com.chizberg.rewind.domain.GradientScheme
+import com.chizberg.rewind.features.colorization.ColorizationPickerModel
 import kotlinx.coroutines.CoroutineScope
 
 /** The settings screen's reducer. Port of iOS `SettingsViewModel`. */
@@ -20,6 +21,8 @@ typealias SettingsModel = Reducer<SettingsViewState, SettingsAction>
  */
 data class SettingsViewState(
     val stored: SettingsState,
+    /** iOS `ui.colorizationPicker`: the model picker pushed from the "Image Colorization" row. */
+    val colorizationPicker: ColorizationPickerModel? = null,
 )
 
 /**
@@ -39,6 +42,12 @@ sealed interface SettingsAction {
     ) : SettingsAction
 
     data object Contact : SettingsAction
+
+    sealed interface ColorizationPicker : SettingsAction {
+        data object Present : ColorizationPicker
+
+        data object Dismiss : ColorizationPicker
+    }
 
     data object OpenRepo : SettingsAction
 
@@ -88,6 +97,9 @@ fun makeSettingsViewModel(
     urlOpener: (String) -> Unit,
     scope: CoroutineScope,
     haptics: Haptics = Haptics.None,
+    makeColorizationPicker: () -> ColorizationPickerModel = {
+        error("No colorization picker factory was injected")
+    },
 ): SettingsModel =
     Reducer<SettingsViewState, SettingsAction>(
         initial = SettingsViewState(stored = settings.value),
@@ -106,6 +118,11 @@ fun makeSettingsViewModel(
                 effect { settings.value = stored }
                 state.copy(stored = stored)
             }
+
+            SettingsAction.ColorizationPicker.Present ->
+                state.copy(colorizationPicker = makeColorizationPicker())
+
+            SettingsAction.ColorizationPicker.Dismiss -> state.copy(colorizationPicker = null)
 
             SettingsAction.Contact -> {
                 effect { urlOpener(CONTACT_URL) }

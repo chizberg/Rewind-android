@@ -106,4 +106,28 @@
          actually being read in (iOS Bundle.main.preferredLocalizations.first). Translators: put the
          code of your own folder here, never a translation of the word. -->
     <string name="app_language">en</string>
+
+    <!-- Colorization (iOS Localizable.xcstrings). -->
+    <string name="colorize">Colorize</string>
+    <string name="colorization_model_default">Default</string>
+    <string name="colorization_model_compact">Compact</string>
+    <string name="colorization_ddcolor_description">Vivid, natural colors. Works well for most photos.</string>
+    <string name="colorization_eccv16_description">Smaller and faster. Colors are softer and less accurate.</string>
+    <!-- Android-only: the download button's a11y label (iOS shows the glyph alone). -->
+    <string name="download">Download</string>
+    <string name="delete">Delete</string>
+    <string name="image_colorization">Image Colorization</string>
+    <string name="pick_a_model">Pick a model</string>
+    <string name="colorization_change_later">You can change the model later in settings</string>
+    <string name="colorization_model">Colorization Model</string>
+    <string name="colorization_feature_promo">free | on device | open source</string>
+    <string name="colorization_feature_lead">Bring color to any black-and-white photo in seconds.</string>
+    <string name="colorization_feature_free">Free, no account needed</string>
+    <string name="colorization_feature_download_once">You download the model only once</string>
+    <string name="colorization_feature_seconds">Each photo takes about 3–10 seconds</string>
+    <string name="colorization_feature_delete_anytime">Delete the model whenever you want</string>
+    <string name="colorization_no_color">It looks like the model couldn\'t add color. Models make mistakes, you can try another one.</string>
+    <string name="colorization_only_tint">It looks like the picture didn\'t get any more colorful. Models make mistakes, you can try another one.</string>
+    <string name="onboarding_colorization_title">Image colorization</string>
+    <string name="onboarding_colorization_description">Add color to black-and-white photos right on your device. Free, no account needed.</string>
 </resources>

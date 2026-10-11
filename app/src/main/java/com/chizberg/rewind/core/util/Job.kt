@@ -2,7 +2,7 @@ package com.chizberg.rewind.core.util
 
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.takeWhile
+import kotlinx.coroutines.flow.transformWhile
 
 /**
  * Work that reports progress while it runs and ends in a result. Port of iOS `Job<Progress,
@@ -30,10 +30,10 @@ class Job<Progress, Success>(
 
     /** iOS `states`: every state up to and including the finished one. */
     suspend fun collectStates(onState: suspend (State<Progress, Success>) -> Unit) {
-        var last: State<Progress, Success>? = null
-        state.takeWhile { last !is State.Finished }.collect {
-            last = it
-            onState(it)
-        }
+        state
+            .transformWhile {
+                emit(it)
+                it !is State.Finished
+            }.collect(onState)
     }
 }

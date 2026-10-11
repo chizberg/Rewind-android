@@ -12,6 +12,7 @@ import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import com.chizberg.rewind.BuildConfig
 import com.chizberg.rewind.R
 import com.chizberg.rewind.colorization.ColorizationManifest
+import com.chizberg.rewind.colorization.ColorizationModelId
 import com.chizberg.rewind.colorization.ColorizationModelStore
 import com.chizberg.rewind.colorization.colorizationManifestRequest
 import com.chizberg.rewind.core.redux.Property
@@ -20,6 +21,8 @@ import com.chizberg.rewind.domain.ImageSorting
 import com.chizberg.rewind.domain.ModelImage
 import com.chizberg.rewind.domain.ModelImageDetails
 import com.chizberg.rewind.domain.StreetViewAvailability
+import com.chizberg.rewind.features.colorization.ColorizationPickerModel
+import com.chizberg.rewind.features.colorization.makeColorizationPickerModel
 import com.chizberg.rewind.features.comparison.CaptureKind
 import com.chizberg.rewind.features.comparison.ComparisonRenderer
 import com.chizberg.rewind.features.comparison.ComparisonState
@@ -141,9 +144,29 @@ class AppGraph(
             )
         }
 
+    /** The settings field the picker writes, as iOS's `settings.colorizationModel.asProperty()`. */
+    private val pickedColorizationModel: Property<ColorizationModelId?> by lazy {
+        Property(
+            getter = { settings.value.colorizationModel },
+            setter = { id -> settings.value = settings.value.copy(colorizationModel = id) },
+        )
+    }
+
+    /** iOS `makeColorizationPicker`: [colorize] is the photo's "colorize now", null from settings. */
+    private fun makeColorizationPicker(colorize: (() -> Unit)?): ColorizationPickerModel =
+        makeColorizationPickerModel(
+            modelStore = colorizationModelStore,
+            pickedModel = pickedColorizationModel,
+            manifest = colorizationManifest,
+            colorize = colorize,
+            scope = scope,
+        )
+
     /** Port of iOS `ColorizationModelStore`. The graphs live in `noBackupFilesDir` — iOS marks its
      *  directory `isExcludedFromBackup`; hundreds of megabytes the host serves again do not belong
-     *  in a backup. Downloads and unpacking go through the cache directory. */
+     *  in a backup. The archive is downloaded into the cache directory, but unpacked next to the
+     *  graphs: a file keeps the group of the directory it was created in, and one born in the
+     *  cache would be counted as cache for as long as it is installed. */
     private val colorizationModelStore =
         ColorizationModelStore(
             downloadPerformer =
@@ -155,7 +178,7 @@ class AppGraph(
             manifest = colorizationManifest,
             baseUrl = BuildConfig.COLORIZATION_MODELS_URL,
             modelsDirectory = File(appContext.noBackupFilesDir, "ColorizationModels"),
-            temporaryDirectory = File(appContext.cacheDir, "ColorizationModels"),
+            temporaryDirectory = File(appContext.noBackupFilesDir, "ColorizationModels.partial"),
             makeModel = { id, file -> makeOrtColorizationModel(appContext, id, file) },
             scope = scope,
         )
@@ -462,6 +485,7 @@ class AppGraph(
             urlOpener = urlOpener,
             haptics = haptics,
             scope = scope,
+            makeColorizationPicker = { makeColorizationPicker(null) },
         )
     }
 

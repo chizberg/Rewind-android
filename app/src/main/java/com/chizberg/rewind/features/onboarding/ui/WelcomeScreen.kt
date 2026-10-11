@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CenterFocusWeak
 import androidx.compose.material.icons.rounded.FastRewind
+import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Panorama
 import androidx.compose.material.icons.rounded.PinDrop
 import androidx.compose.material.icons.rounded.Star
@@ -55,6 +56,11 @@ fun WelcomeScreen(modifier: Modifier = Modifier) {
             icon = Icons.Rounded.Star,
             title = R.string.onboarding_images_saving_title,
             description = R.string.onboarding_images_saving_description,
+        )
+        FeatureCard(
+            icon = Icons.Rounded.Palette,
+            title = R.string.onboarding_colorization_title,
+            description = R.string.onboarding_colorization_description,
         )
         FeatureCard(
             icon = Icons.Rounded.CenterFocusWeak,
