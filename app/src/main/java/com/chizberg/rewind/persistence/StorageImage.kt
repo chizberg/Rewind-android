@@ -18,7 +18,9 @@ data class StorageImage(
     val imagePath: String,
     val title: String,
     val dir: Direction?,
-    val coordinate: Coordinate,
+    // Nullable since iOS 91871fd (photos without coordinates can be starred from a description
+    // link); favorites saved before that decode as before.
+    val coordinate: Coordinate? = null,
     val date: ImageDate,
 )
 

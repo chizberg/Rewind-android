@@ -129,7 +129,7 @@ fun StreetViewViewfinder(
             StreetViewPanoramaView(
                 context,
                 StreetViewPanoramaOptions()
-                    .position(image.coordinate.toLatLng())
+                    .position(image.forcedCoordinate.toLatLng())
                     .apply {
                         image.dir?.angleDegrees?.let { heading ->
                             panoramaCamera(

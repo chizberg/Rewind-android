@@ -31,7 +31,7 @@ sealed interface AnnotationValue {
 /** The map coordinate an annotation renders at (image point, or cluster center). */
 fun AnnotationValue.coordinate(): Coordinate =
     when (this) {
-        is AnnotationValue.Image -> value.coordinate
+        is AnnotationValue.Image -> value.forcedCoordinate
         is AnnotationValue.Cluster -> value.coordinate
         is AnnotationValue.LocalCluster -> value.coordinate
     }

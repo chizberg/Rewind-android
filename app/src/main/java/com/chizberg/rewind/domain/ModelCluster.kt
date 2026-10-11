@@ -13,7 +13,7 @@ data class ModelCluster(
 ) {
     constructor(nc: NetworkCluster) : this(
         // 🩼 The server sends the preview's geo reversed ([lon, lat]); flip it back.
-        preview = ModelImage(nc.preview).let { it.copy(coordinate = it.coordinate.reversed()) },
+        preview = ModelImage(nc.preview).let { it.copy(coordinate = it.coordinate?.reversed()) },
         coordinate = Coordinate.fromArray(nc.geo),
         count = nc.count,
     )

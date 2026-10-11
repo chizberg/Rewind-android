@@ -17,6 +17,7 @@ import com.chizberg.rewind.core.util.OrientationLock
 import com.chizberg.rewind.domain.ImageSorting
 import com.chizberg.rewind.domain.ModelImage
 import com.chizberg.rewind.domain.ModelImageDetails
+import com.chizberg.rewind.domain.StreetViewAvailability
 import com.chizberg.rewind.features.comparison.ComparisonRenderer
 import com.chizberg.rewind.features.comparison.ComparisonState
 import com.chizberg.rewind.features.comparison.ComparisonViewDeps
@@ -40,6 +41,7 @@ import com.chizberg.rewind.features.search.makeSearchModel
 import com.chizberg.rewind.features.settings.SettingsState
 import com.chizberg.rewind.features.settings.makeSettingsViewModel
 import com.chizberg.rewind.network.ImageDetailsLoader
+import com.chizberg.rewind.network.Remote
 import com.chizberg.rewind.network.RequestPerformer
 import com.chizberg.rewind.network.RewindRemotes
 import com.chizberg.rewind.network.invoke
@@ -325,8 +327,13 @@ class AppGraph(
                 makeComparisonModel(
                     captureMode = mode,
                     oldImage = image,
+                    // iOS guards a photo without coordinates here (the button is hidden for it, so
+                    // this is never reached) and answers `.unavailable`.
                     streetViewAvailability =
-                        remotes.streetViewAvailability.mapArgs { _: Unit -> image.coordinate },
+                        Remote { _: Unit ->
+                            image.coordinate?.let { remotes.streetViewAvailability.load(it) }
+                                ?: StreetViewAvailability.Unavailable
+                        },
                     cameraSession = cameraSession,
                     renderer = renderer,
                     orientation = deviceOrientation(appContext),

@@ -316,20 +316,21 @@ fun makeImageDetailsModel(
                 image = modelImage,
                 openSource = openSource,
                 isFavorite = isFavorite(modelImage),
+                // A photo without coordinates (reached through a description link) has nowhere
+                // to show on the map, look at in Street View or route to.
                 actionButtons =
-                    listOf(
-                        ImageDetailsAction.Button.Favorite,
-                        // iOS offers these two on the phone only (`withUIIdiom(phone:pad: nil)`);
-                        // an Android tablet has a camera and Street View works there, so they are
-                        // offered on every form factor.
-                        ImageDetailsAction.Button.CompareCamera,
-                        ImageDetailsAction.Button.CompareStreetView,
-                        ImageDetailsAction.Button.ShowOnMap,
-                        ImageDetailsAction.Button.Share,
-                        ImageDetailsAction.Button.SaveImage,
-                        ImageDetailsAction.Button.ViewOnWeb,
-                        ImageDetailsAction.Button.Route,
-                    ),
+                    buildList {
+                        add(ImageDetailsAction.Button.Favorite)
+                        add(ImageDetailsAction.Button.CompareCamera)
+                        if (modelImage.coordinate != null) {
+                            add(ImageDetailsAction.Button.CompareStreetView)
+                            add(ImageDetailsAction.Button.ShowOnMap)
+                        }
+                        add(ImageDetailsAction.Button.Share)
+                        add(ImageDetailsAction.Button.SaveImage)
+                        add(ImageDetailsAction.Button.ViewOnWeb)
+                        if (modelImage.coordinate != null) add(ImageDetailsAction.Button.Route)
+                    },
             ).let { initial -> cachedDetails?.let { initial.applying(it) } ?: initial },
         scope = scope,
     ) { state, action, effect, asyncEffect ->
@@ -429,7 +430,7 @@ fun makeImageDetailsModel(
                     }
 
                     ImageDetailsAction.Button.ShowOnMap -> {
-                        effect { showOnMap(modelImage.coordinate) }
+                        modelImage.coordinate?.let { effect { showOnMap(it) } }
                         state
                     }
 
@@ -484,13 +485,12 @@ fun makeImageDetailsModel(
 
             is ImageDetailsAction.MapAppSelected -> {
                 val link =
-                    action.app.coordinateLink(
-                        modelImage.coordinate.latitude,
-                        modelImage.coordinate.longitude,
-                    )
+                    modelImage.coordinate?.let {
+                        action.app.coordinateLink(it.latitude, it.longitude)
+                    }
                 // Nothing on screen says the route failed — the buzz is the whole feedback, as on
                 // iOS. See the manifest's `<queries>`: without it every link looks unopenable.
-                if (canOpenUrl(link)) {
+                if (link != null && canOpenUrl(link)) {
                     effect { urlOpener(link) }
                 } else {
                     effect { haptics.error() }
