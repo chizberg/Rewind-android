@@ -1,6 +1,7 @@
 package com.chizberg.rewind.features.details.ui
 
 import android.graphics.Bitmap
+import android.graphics.RectF
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
@@ -34,7 +35,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
-import com.chizberg.rewind.colorization.image.ArgbImage
+import com.chizberg.rewind.colorization.WatermarkedImage
 import com.chizberg.rewind.ui.toBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -98,7 +99,7 @@ private val BlobFalloff = listOf(1f, 0.78f, 0.37f, 0.1f, 0f)
  */
 @Composable
 fun MagicOverlay(
-    image: ArgbImage?,
+    image: WatermarkedImage?,
     origin: Offset,
     isActive: Boolean,
     modifier: Modifier = Modifier,
@@ -183,24 +184,43 @@ fun MagicOverlay(
 
 private fun durationMs(): Int = (Magic.DURATION * MILLIS_PER_SECOND).roundToInt()
 
-/** iOS `MagicBlur`: the photo brought down to a 384-px sample, which the blur then spreads. */
+/**
+ * iOS `MagicBlur`: the photo brought down to a 384-px sample, which the blur then spreads. The
+ * photo comes split from its watermark strip, so the two are stacked back in the sample. A run
+ * that ends takes its image with it, and the sample stays for the fade-out.
+ */
 @Composable
-private fun produceBlurSample(image: ArgbImage?) =
+private fun produceBlurSample(image: WatermarkedImage?) =
     androidx.compose.runtime.produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, image) {
-        value =
-            image?.let {
-                withContext(Dispatchers.Default) {
-                    val scale = Magic.BLUR_SAMPLE_SIDE.toFloat() / max(it.width, it.height)
-                    Bitmap
-                        .createScaledBitmap(
-                            it.toBitmap(),
-                            max(1, (it.width * scale).roundToInt()),
-                            max(1, (it.height * scale).roundToInt()),
-                            true,
-                        ).asImageBitmap()
-                }
-            }
+        val source = image ?: return@produceState
+        value = withContext(Dispatchers.Default) { source.blurSample().asImageBitmap() }
     }
+
+private fun WatermarkedImage.blurSample(): Bitmap {
+    val stripHeight = watermark?.let { content.width.toFloat() * it.height / it.width } ?: 0f
+    val height = content.height + stripHeight
+    val scale = Magic.BLUR_SAMPLE_SIDE / max(content.width.toFloat(), height)
+    val sample =
+        Bitmap.createBitmap(
+            max(1, (content.width * scale).roundToInt()),
+            max(1, (height * scale).roundToInt()),
+            Bitmap.Config.ARGB_8888,
+        )
+    val canvas = android.graphics.Canvas(sample)
+    val paint = android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG)
+    val contentBottom = content.height * scale
+    val width = sample.width.toFloat()
+    canvas.drawBitmap(content.toBitmap(), null, RectF(0f, 0f, width, contentBottom), paint)
+    watermark?.let {
+        canvas.drawBitmap(
+            it.toBitmap(),
+            null,
+            RectF(0f, contentBottom, width, sample.height.toFloat()),
+            paint,
+        )
+    }
+    return sample
+}
 
 /**
  * iOS `MagicRippleLayer` as a mask: opaque inside a circle around [origin] whose radius grows to

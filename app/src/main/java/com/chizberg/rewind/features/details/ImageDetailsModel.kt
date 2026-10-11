@@ -164,7 +164,10 @@ data class ImageDetailsState(
     val actionButtons: List<ImageDetailsAction.Button>,
     val details: ModelImageDetails? = null,
     /** iOS `uiImage`: the photo's pixels, read once the view has shown it — only colorization
-     *  needs them; the screen itself draws through Coil. */
+     *  needs them; the screen itself draws through Coil. Divergence: iOS keeps them for the life
+     *  of the screen, ours are let go once the detection has split them into the
+     *  [ColorizationState.Available] image — a full-size scan is tens of megabytes of heap per
+     *  screen, and every description link stacks another screen. */
     val pixels: ArgbImage? = null,
     /** iOS `imageSaveCounts`: every save bumps the count of the version on screen, so the
      *  fullscreen viewer's banner re-announces a second save, and saving the original does not
@@ -495,7 +498,9 @@ fun makeImageDetailsModel(
             }
 
             ImageDetailsAction.ImageLoaded -> {
-                if (state.pixels == null) {
+                // Once read and detected, the pixels are gone from the state on purpose; another
+                // `ImageLoaded` (the view rebuilt) must not read them again.
+                if (state.pixels == null && state.colorizationState == ColorizationState.None) {
                     asyncEffect(
                         AsyncEffect.perform(PIXELS_EFFECT_ID) { send ->
                             try {
@@ -860,6 +865,7 @@ fun makeImageDetailsModel(
 
             is ImageDetailsAction.Internal.BwDetectionCompleted ->
                 state.copy(
+                    pixels = null,
                     colorizationState =
                         if (action.isBw) {
                             ColorizationState.Available(action.image)

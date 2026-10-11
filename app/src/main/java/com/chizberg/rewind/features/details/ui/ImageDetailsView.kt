@@ -118,6 +118,7 @@ import coil3.compose.AsyncImagePainter
 import com.chizberg.rewind.R
 import com.chizberg.rewind.app.RewindAlert
 import com.chizberg.rewind.colorization.ColorizationCheck
+import com.chizberg.rewind.colorization.WatermarkedImage
 import com.chizberg.rewind.colorization.image.ArgbImage
 import com.chizberg.rewind.domain.GradientScheme
 import com.chizberg.rewind.domain.ModelImage
@@ -535,7 +536,7 @@ private fun DetailsPicture(
                     }
                 }
                 MagicOverlay(
-                    image = colorization.pixels,
+                    image = colorization.sample,
                     origin = (colorization.buttonCenter ?: pictureOrigin) - pictureOrigin,
                     isActive = colorization.isColorizing,
                     modifier = Modifier.fillMaxSize(),
@@ -1116,7 +1117,8 @@ private tailrec fun Context.findActivity(): Activity? =
 /** What the photo needs to know about colorization, resolved once per state. */
 private class PictureColorization(
     val colorized: ImageBitmap?,
-    val pixels: ArgbImage?,
+    /** The photo the run works on, for the effect's blurred backdrop. */
+    val sample: WatermarkedImage?,
     val isColorizing: Boolean,
     val buttonCenter: Offset?,
 )
@@ -1131,7 +1133,8 @@ private fun pictureColorization(
     val ready = state.colorizationState as? ColorizationState.Ready
     val bitmap = rememberImageBitmap(ready?.colorized)
     val shown = bitmap?.takeIf { ready?.showing == ColorizationState.Showing.Colorized }
-    return PictureColorization(shown, state.pixels, state.isColorizing, buttonCenter)
+    val sample = (state.colorizationState as? ColorizationState.Colorizing)?.image
+    return PictureColorization(shown, sample, state.isColorizing, buttonCenter)
 }
 
 /** iOS `ColorizeButton.Phase`. */
