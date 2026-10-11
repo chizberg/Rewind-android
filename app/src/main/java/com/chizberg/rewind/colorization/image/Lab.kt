@@ -3,7 +3,6 @@ package com.chizberg.rewind.colorization.image
 import com.chizberg.rewind.colorization.BYTE_MAX
 import com.chizberg.rewind.colorization.ColorizationHelpers
 import kotlin.math.cbrt
-import kotlin.math.pow
 
 /**
  * sRGB <-> CIE L*a*b*, the standard formulas with the constants as OpenCV spells them, because
@@ -98,20 +97,6 @@ object Lab {
     private fun fInverse(u: Float): Float {
         val cubed = u * u * u
         return if (cubed > THRESHOLD) cubed else (u - OFFSET) / SLOPE
-    }
-
-    /** The inverse of the sRGB transfer function (IEC 61966-2-1). */
-    @Suppress("MagicNumber")
-    private fun gammaDecode(c: Float): Float {
-        if (c <= 0.04045f) return c / 12.92f
-        return ((c + 0.055f) / 1.055f).pow(2.4f)
-    }
-
-    /** The sRGB transfer function itself (IEC 61966-2-1). */
-    @Suppress("MagicNumber")
-    private fun gammaEncode(c: Float): Float {
-        if (c <= 0.0031308f) return 12.92f * c
-        return 1.055f * c.pow(1 / 2.4f) - 0.055f
     }
 
     /**

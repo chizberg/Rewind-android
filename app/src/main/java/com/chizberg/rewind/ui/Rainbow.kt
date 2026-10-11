@@ -1,6 +1,8 @@
 package com.chizberg.rewind.ui
 
 import androidx.compose.ui.graphics.Color
+import com.chizberg.rewind.colorization.image.gammaDecode
+import com.chizberg.rewind.colorization.image.gammaEncode
 import kotlin.math.pow
 
 /**
@@ -13,9 +15,9 @@ fun rainbowColors(exposure: Float = 2f): List<Color> =
     RainbowBase.map { color ->
         val scale = 2f.pow(exposure)
         Color(
-            red = encode(decode(color.red) * scale),
-            green = encode(decode(color.green) * scale),
-            blue = encode(decode(color.blue) * scale),
+            red = gammaEncode((gammaDecode(color.red) * scale).coerceIn(0f, 1f)),
+            green = gammaEncode((gammaDecode(color.green) * scale).coerceIn(0f, 1f)),
+            blue = gammaEncode((gammaDecode(color.blue) * scale).coerceIn(0f, 1f)),
             alpha = color.alpha,
         )
     }
@@ -30,15 +32,3 @@ private val RainbowBase =
         Color(0xFFAF52DE),
         Color(0xFFFF3B30),
     )
-
-@Suppress("MagicNumber")
-private fun decode(c: Float): Float {
-    if (c <= 0.04045f) return c / 12.92f
-    return ((c + 0.055f) / 1.055f).pow(2.4f)
-}
-
-@Suppress("MagicNumber")
-private fun encode(linear: Float): Float {
-    val c = linear.coerceIn(0f, 1f)
-    return if (c <= 0.0031308f) 12.92f * c else 1.055f * c.pow(1 / 2.4f) - 0.055f
-}
