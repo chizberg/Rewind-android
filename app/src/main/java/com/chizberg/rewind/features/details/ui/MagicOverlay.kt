@@ -107,11 +107,15 @@ fun MagicOverlay(
     var isShown by remember { mutableStateOf(false) }
     val reveal = remember { Animatable(1f) }
     val gust = remember { Animatable(0f) }
+    // Where the run started, kept for the whole run: the button stays put while the photo under
+    // it scrolls, and a moving origin would rebuild the field on every frame of the scroll.
+    var runOrigin by remember { mutableStateOf(origin) }
     LaunchedEffect(isActive) {
         if (isActive) {
             val fresh = !isShown
             isShown = true
             if (fresh) {
+                runOrigin = origin
                 alpha.snapTo(1f)
                 reveal.snapTo(0f)
                 gust.snapTo(0f)
@@ -135,7 +139,7 @@ fun MagicOverlay(
                 compositingStrategy = CompositingStrategy.Offscreen
             }.drawWithContent {
                 drawContent()
-                drawRipple(origin, reveal.value)
+                drawRipple(runOrigin, reveal.value)
             },
     ) {
         blurred?.let { sample ->
@@ -148,16 +152,17 @@ fun MagicOverlay(
         }
         val density = LocalDensity.current.density
         val dust =
-            remember(constraints.maxWidth, constraints.maxHeight, origin) {
+            remember(constraints.maxWidth, constraints.maxHeight, runOrigin) {
                 DustField(
                     Size(constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat()),
-                    origin,
+                    runOrigin,
                     density,
                 )
             }
         var nanos by remember { mutableLongStateOf(0L) }
-        LaunchedEffect(Unit) {
-            val start = withFrameNanos { it }
+        // Keyed by the field, so a new one (the photo resized) is the one that moves.
+        LaunchedEffect(dust) {
+            val start = withFrameNanos { it } - nanos
             while (true) {
                 withFrameNanos { frame ->
                     val previous = nanos
