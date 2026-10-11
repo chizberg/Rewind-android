@@ -200,6 +200,29 @@ class ImageDetailsModelTest {
             assertEquals(2, translateCallCount) // no new network calls
         }
 
+    /** A recreated activity presents the same screen again; iOS's `.willBePresented` does
+     *  nothing once the details are in, so the translation on screen stays. */
+    @Test
+    fun presentingAgainKeepsTheTranslation() =
+        reducerTest { scope ->
+            val model =
+                Harness(scope).makeModel(
+                    detailsDescription = "Вулица Кастрычницкая",
+                    translate = Remote { params -> "[xx] " + params.text },
+                )
+            model(ImageDetailsAction.WillBePresented)
+            advanceUntilIdle()
+            model(ImageDetailsAction.Translate)
+            advanceUntilIdle()
+            val translated = model.state.value.translationState
+            check(translated is TranslationState.Translated)
+
+            model(ImageDetailsAction.WillBePresented)
+            advanceUntilIdle()
+
+            assertEquals(translated, model.state.value.translationState)
+        }
+
     /**
      * The model sees the photo without its watermark strip, and the strip comes back under the
      * colorized result — a 2×2 photo over a 2×1 strip gives a 2×3 result from a 2×2 gray frame.

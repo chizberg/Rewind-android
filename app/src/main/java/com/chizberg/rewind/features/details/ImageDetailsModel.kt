@@ -479,9 +479,14 @@ fun makeImageDetailsModel(
                             }
                         },
                     )
-                } else {
+                } else if (state.translationState !is TranslationState.Translated &&
+                    state.translationState != TranslationState.Translating
+                ) {
                     // Seeded details skip the request, not the language verdict: iOS settles that
                     // synchronously in `apply(details:to:)`, ours is the detector's round trip.
+                    // The view says this again when the activity is recreated, and iOS does
+                    // nothing then: a translation the user asked for must not be undone by a new
+                    // verdict. Any other state is the verdict itself, which the detector repeats.
                     seeded.description?.let {
                         asyncEffect(detectDescriptionLanguage(it, detectLanguage))
                     }
