@@ -298,6 +298,22 @@ class ImageDetailsModelTest {
             assertTrue(eventually { model.state.value.alert != null })
             assertEquals(ColorizationState.Available(source), model.state.value.colorizationState)
         }
+
+    /** A flat frame has no line to measure: iOS asserts and stays `.detecting`; a throw out of
+     *  the effect here would take the process down with it. */
+    @Test
+    fun aFlatColorPhotoGetsNoButtonAndDoesNotCrash() =
+        reducerTest { scope ->
+            val model = Harness(scope).makeModel()
+            model(ImageDetailsAction.WillBePresented)
+            model(ImageDetailsAction.Internal.PixelsLoaded(grayImage(2, 2, List(4) { 0 })))
+
+            repeat(SETTLE_POLLS) {
+                advanceUntilIdle()
+                Thread.sleep(EVENTUALLY_POLL_MS)
+            }
+            assertEquals(ColorizationState.Detecting, model.state.value.colorizationState)
+        }
 }
 
 private class ThrowingColorizationModel : ColorizationModel {
@@ -323,6 +339,7 @@ private fun TestScope.eventually(condition: () -> Boolean): Boolean {
 private val OK = ColorizationCheck.Ok
 private const val EVENTUALLY_ATTEMPTS = 500
 private const val EVENTUALLY_POLL_MS = 10L
+private const val SETTLE_POLLS = 20
 
 private class Harness(
     private val scope: CoroutineScope,

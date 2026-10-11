@@ -960,12 +960,19 @@ private fun ImageDetailsState.checkingColorizationAvailability(
     val details = details ?: return this
     asyncEffect(
         AsyncEffect.perform { send ->
-            val image =
-                withContext(Dispatchers.Default) {
-                    splitWatermark(pixels, details.watermarkHeight, details.contentHeight)
-                }
-            val isBw = withContext(Dispatchers.Default) { isMonochrome(image.content) }
-            send(ImageDetailsAction.Internal.BwDetectionCompleted(isBw, image))
+            try {
+                val image =
+                    withContext(Dispatchers.Default) {
+                        splitWatermark(pixels, details.watermarkHeight, details.contentHeight)
+                    }
+                val isBw = withContext(Dispatchers.Default) { isMonochrome(image.content) }
+                send(ImageDetailsAction.Internal.BwDetectionCompleted(isBw, image))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: IllegalArgumentException) {
+                // A single flat color or a photo of a couple of pixels has no line to measure.
+                // iOS asserts and stays at `.detecting`: no button, nothing else on screen.
+            }
         },
     )
     return copy(colorizationState = ColorizationState.Detecting)
