@@ -80,10 +80,6 @@ fun RootView(modifier: Modifier = Modifier) {
         },
     )
 
-    // The comparison screen holds the device in portrait while it is up; iOS answers the same
-    // request from its AppDelegate, out of the same graph property.
-    OrientationLockHost(graph.orientationLock)
-
     // Play's review card, like the permission dialog, needs an Activity to launch from.
     ReviewPromptHost(graph.reviewPromptRequests)
 

@@ -15,9 +15,21 @@ class ModelImage(
     val imagePath: String,
     val title: String,
     val dir: Direction?,
-    val coordinate: Coordinate,
+    /** Null for a photo without coordinates — only ever reached through a description link
+     * (see [com.chizberg.rewind.network.dto.NetworkImageDetails.geo]). */
+    val coordinate: Coordinate?,
     val date: ImageDate,
 ) {
+    /**
+     * iOS `forcedCoordinate`: the coordinate for paths that only ever see located photos — the
+     * map's annotations and clustering (`getByBounds` returns nothing else), Street View (offered
+     * only with a coordinate). iOS asserts in debug and falls back to `.zero`; ours falls back the
+     * same way.
+     */
+    val forcedCoordinate: Coordinate get() =
+        coordinate
+            ?: Coordinate(latitude = 0.0, longitude = 0.0)
+
     constructor(ni: NetworkImage) : this(
         cid = ni.cid,
         imagePath = ni.file,
@@ -37,7 +49,7 @@ class ModelImage(
         imagePath: String = this.imagePath,
         title: String = this.title,
         dir: Direction? = this.dir,
-        coordinate: Coordinate = this.coordinate,
+        coordinate: Coordinate? = this.coordinate,
         date: ImageDate = this.date,
     ): ModelImage = ModelImage(cid, imagePath, title, dir, coordinate, date)
 }

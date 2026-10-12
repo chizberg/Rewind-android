@@ -12,7 +12,7 @@ data class ModelImageDetails(
     val cid: Int,
     val title: String,
     val direction: Direction?,
-    val coordinate: Coordinate,
+    val coordinate: Coordinate?,
     val date: ImageDate,
     val description: String?,
     val source: String?,
@@ -21,12 +21,14 @@ data class ModelImageDetails(
     val username: String,
     val file: String,
     val dir: Direction?,
+    val watermarkHeight: Int,
+    val contentHeight: Int,
 ) {
     constructor(ni: NetworkImageDetails) : this(
         cid = ni.cid,
         title = ni.title,
         direction = Direction.fromString(ni.dir),
-        coordinate = Coordinate.fromArray(ni.geo),
+        coordinate = ni.geo?.let(Coordinate::fromArray),
         date = ImageDate(year = ni.year, year2 = ni.year2),
         description = ni.desc,
         source = ni.source,
@@ -35,6 +37,8 @@ data class ModelImageDetails(
         username = extractUsername(ni),
         file = ni.file,
         dir = Direction.fromString(ni.dir),
+        watermarkHeight = ni.waterh,
+        contentHeight = ni.h,
     )
 }
 

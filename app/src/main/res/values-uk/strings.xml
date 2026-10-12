@@ -91,7 +91,7 @@
     <!-- M14: then/now comparison -->
     <string name="action_compare">Порівняти</string>
     <string name="action_compare_street_view">Порівняти з панорамами Google</string>
-    <string name="comparison_saved_to_photos">Збережено у Фото</string>
+    <string name="saved_to_photos">Збережено у Фото</string>
     <string name="comparison_retake">Перезняти</string>
     <string name="comparison_style_side_by_side">Поруч</string>
     <string name="comparison_style_card_on_card">Картка на картці</string>
@@ -103,4 +103,28 @@
     <string name="show_original">Показати оригінал</string>
     <!-- The language code of this folder, not a word to translate — see values/strings.xml. -->
     <string name="app_language">uk</string>
+
+    <!-- Colorization (iOS Localizable.xcstrings). -->
+    <string name="colorize">Розфарбувати</string>
+    <string name="colorization_model_default">За замовчуванням</string>
+    <string name="colorization_model_compact">Компактна</string>
+    <string name="colorization_ddcolor_description">Яскраві, природні кольори. Добре підходить для більшості фото.</string>
+    <string name="colorization_eccv16_description">Менша і швидша. Кольори м\'якші та менш точні.</string>
+    <!-- Android-only: the download button's a11y label (iOS shows the glyph alone). -->
+    <string name="download">Завантажити</string>
+    <string name="delete">Видалити</string>
+    <string name="image_colorization">Розфарбування фото</string>
+    <string name="pick_a_model">Виберіть модель</string>
+    <string name="colorization_change_later">Ви можете змінити модель пізніше в налаштуваннях</string>
+    <string name="colorization_model">Модель розфарбування</string>
+    <string name="colorization_feature_promo">безкоштовно | на пристрої | відкритий код</string>
+    <string name="colorization_feature_lead">Додайте колір будь-якому чорно-білому фото за лічені секунди.</string>
+    <string name="colorization_feature_free">Безкоштовно, акаунт не потрібен</string>
+    <string name="colorization_feature_download_once">Модель завантажується лише один раз</string>
+    <string name="colorization_feature_seconds">Одне фото розфарбовується за 3–10 секунд</string>
+    <string name="colorization_feature_delete_anytime">Видалити модель можна будь-коли</string>
+    <string name="colorization_no_color">Здається, моделі не вдалося додати колір. Моделі можуть помилятися, ви можете спробувати іншу.</string>
+    <string name="colorization_only_tint">Виглядає так, ніби зображення не стало насиченішим. Моделі можуть помилятися, ви можете спробувати іншу.</string>
+    <string name="onboarding_colorization_title">Розфарбовування фото</string>
+    <string name="onboarding_colorization_description">Додайте колір чорно-білим фотографіям просто на пристрої. Безкоштовно, акаунт не потрібен.</string>
 </resources>

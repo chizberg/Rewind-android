@@ -189,8 +189,8 @@ private fun groupImages(
     for (image in images) {
         val cell =
             ClusteringCell(
-                latIndex = floor(image.coordinate.latitude / size).toInt(),
-                lonIndex = floor(image.coordinate.longitude / size).toInt(),
+                latIndex = floor(image.forcedCoordinate.latitude / size).toInt(),
+                lonIndex = floor(image.forcedCoordinate.longitude / size).toInt(),
                 size = size,
             )
         result.getOrPut(cell) { mutableSetOf() }.add(image)

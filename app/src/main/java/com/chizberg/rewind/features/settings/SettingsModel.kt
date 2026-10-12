@@ -4,6 +4,7 @@ import com.chizberg.rewind.core.redux.Property
 import com.chizberg.rewind.core.redux.Reducer
 import com.chizberg.rewind.core.util.Haptics
 import com.chizberg.rewind.domain.GradientScheme
+import com.chizberg.rewind.features.colorization.ColorizationPickerModel
 import kotlinx.coroutines.CoroutineScope
 
 /** The settings screen's reducer. Port of iOS `SettingsViewModel`. */
@@ -20,6 +21,8 @@ typealias SettingsModel = Reducer<SettingsViewState, SettingsAction>
  */
 data class SettingsViewState(
     val stored: SettingsState,
+    /** iOS `ui.colorizationPicker`: the model picker pushed from the "Image Colorization" row. */
+    val colorizationPicker: ColorizationPickerModel? = null,
 )
 
 /**
@@ -40,6 +43,12 @@ sealed interface SettingsAction {
 
     data object Contact : SettingsAction
 
+    sealed interface ColorizationPicker : SettingsAction {
+        data object Present : ColorizationPicker
+
+        data object Dismiss : ColorizationPicker
+    }
+
     data object OpenRepo : SettingsAction
 
     data object OpenPastVu : SettingsAction
@@ -56,6 +65,11 @@ private const val REPO_URL = "https://github.com/chizberg/Rewind"
 
 /**
  * Builds the settings reducer. Port of iOS `makeSettingsViewModel`.
+ *
+ * Each change is applied to the blob as it is persisted *now*, not to the screen's copy: the
+ * colorization picker opened from here writes the picked model straight into [settings], and a
+ * later toggle written from the stale copy would undo it (iOS mutates the stored value in place,
+ * `settings.value.x = …`, which has the same effect).
  *
  * The screen is opened through a factory, so [settings] is read once at construction and the state
  * starts from whatever is persisted right now (iOS builds a fresh `SettingsViewModel` on every
@@ -83,6 +97,9 @@ fun makeSettingsViewModel(
     urlOpener: (String) -> Unit,
     scope: CoroutineScope,
     haptics: Haptics = Haptics.None,
+    makeColorizationPicker: () -> ColorizationPickerModel = {
+        error("No colorization picker factory was injected")
+    },
 ): SettingsModel =
     Reducer<SettingsViewState, SettingsAction>(
         initial = SettingsViewState(stored = settings.value),
@@ -90,17 +107,22 @@ fun makeSettingsViewModel(
     ) { state, action, effect, _ ->
         when (action) {
             is SettingsAction.SetOpenClusterPreviews -> {
-                val stored = state.stored.copy(openClusterPreviews = action.value)
+                val stored = settings.value.copy(openClusterPreviews = action.value)
                 effect { settings.value = stored }
                 state.copy(stored = stored)
             }
 
             is SettingsAction.GradientSchemeSelected -> {
-                val stored = state.stored.copy(gradientScheme = action.scheme)
+                val stored = settings.value.copy(gradientScheme = action.scheme)
                 effect { haptics.selection() }
                 effect { settings.value = stored }
                 state.copy(stored = stored)
             }
+
+            SettingsAction.ColorizationPicker.Present ->
+                state.copy(colorizationPicker = makeColorizationPicker())
+
+            SettingsAction.ColorizationPicker.Dismiss -> state.copy(colorizationPicker = null)
 
             SettingsAction.Contact -> {
                 effect { urlOpener(CONTACT_URL) }

@@ -7,7 +7,7 @@ package com.chizberg.rewind.core.util
  *  - [selection] — `UISelectionFeedbackGenerator().selectionChanged()`
  *  - [impactLight] — `UIImpactFeedbackGenerator(style: .light).impactOccurred()`
  *
- * JVM-only, exactly like [OrientationLock]: reducers name the *intent*, the Android translation
+ * JVM-only: reducers name the *intent*, the Android translation
  * into `HapticFeedbackConstants` lives in `app/AndroidHaptics.kt`. iOS constructs its generators
  * inline in `reduce`; the same calls sit in the same branches here, wrapped in an `effect { }` as
  * every other side effect in this repo is.

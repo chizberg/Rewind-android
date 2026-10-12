@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CenterFocusWeak
 import androidx.compose.material.icons.rounded.FastRewind
+import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Panorama
 import androidx.compose.material.icons.rounded.PinDrop
 import androidx.compose.material.icons.rounded.Star
@@ -26,6 +27,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
@@ -54,6 +56,11 @@ fun WelcomeScreen(modifier: Modifier = Modifier) {
             icon = Icons.Rounded.Star,
             title = R.string.onboarding_images_saving_title,
             description = R.string.onboarding_images_saving_description,
+        )
+        FeatureCard(
+            icon = Icons.Rounded.Palette,
+            title = R.string.onboarding_colorization_title,
+            description = R.string.onboarding_colorization_description,
         )
         FeatureCard(
             icon = Icons.Rounded.CenterFocusWeak,
@@ -92,8 +99,9 @@ private fun Hero() {
                 text =
                     buildAnnotatedString {
                         append(stringResource(R.string.onboarding_this_is))
-                        // The wordmark keeps the brand red on both platforms — see [RewindRed].
-                        withStyle(SpanStyle(color = RewindRed)) {
+                        // The wordmark keeps the brand red on both platforms — see [RewindRed] —
+                        // and is set in serif, as on iOS (4b0a0fb).
+                        withStyle(SpanStyle(color = RewindRed, fontFamily = FontFamily.Serif)) {
                             append(stringResource(R.string.app_name))
                         }
                     },

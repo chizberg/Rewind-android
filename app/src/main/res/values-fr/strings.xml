@@ -91,7 +91,7 @@
     <!-- M14: then/now comparison -->
     <string name="action_compare">Comparer</string>
     <string name="action_compare_street_view">Comparer avec Google Street View</string>
-    <string name="comparison_saved_to_photos">Enregistré dans Photos</string>
+    <string name="saved_to_photos">Enregistré dans Photos</string>
     <string name="comparison_retake">Reprendre</string>
     <string name="comparison_style_side_by_side">Côte à côte</string>
     <string name="comparison_style_card_on_card">Carte sur carte</string>
@@ -103,4 +103,28 @@
     <string name="show_original">Afficher l\'original</string>
     <!-- The language code of this folder, not a word to translate — see values/strings.xml. -->
     <string name="app_language">fr</string>
+
+    <!-- Colorization (iOS Localizable.xcstrings). -->
+    <string name="colorize">Coloriser</string>
+    <string name="colorization_model_default">Par défaut</string>
+    <string name="colorization_model_compact">Compact</string>
+    <string name="colorization_ddcolor_description">Couleurs vives et naturelles. Fonctionne bien pour la plupart des photos.</string>
+    <string name="colorization_eccv16_description">Plus petit et plus rapide. Couleurs plus douces et moins précises.</string>
+    <!-- Android-only: the download button's a11y label (iOS shows the glyph alone). -->
+    <string name="download">Télécharger</string>
+    <string name="delete">Supprimer</string>
+    <string name="image_colorization">Colorisation d\'images</string>
+    <string name="pick_a_model">Choisissez un modèle</string>
+    <string name="colorization_change_later">Vous pourrez changer de modèle plus tard dans Réglages</string>
+    <string name="colorization_model">Modèle de colorisation</string>
+    <string name="colorization_feature_promo">gratuit | sur l\'appareil | open source</string>
+    <string name="colorization_feature_lead">Ajoutez de la couleur à n\'importe quelle photo en noir et blanc en quelques secondes.</string>
+    <string name="colorization_feature_free">Gratuit, sans inscription</string>
+    <string name="colorization_feature_download_once">Vous ne téléchargez le modèle qu\'une seule fois</string>
+    <string name="colorization_feature_seconds">Chaque photo prend environ 3 à 10 secondes</string>
+    <string name="colorization_feature_delete_anytime">Supprimez le modèle quand vous voulez</string>
+    <string name="colorization_no_color">Il semble que le modèle n\'ait pas réussi à ajouter de la couleur. Les modèles font des erreurs, vous pouvez en essayer un autre.</string>
+    <string name="colorization_only_tint">On dirait que l\'image n\'est pas devenue plus colorée. Les modèles font des erreurs, vous pouvez en essayer un autre.</string>
+    <string name="onboarding_colorization_title">Coloriser les photos</string>
+    <string name="onboarding_colorization_description">Ajoutez de la couleur aux photos en noir et blanc directement sur votre appareil. Gratuit, sans inscription.</string>
 </resources>

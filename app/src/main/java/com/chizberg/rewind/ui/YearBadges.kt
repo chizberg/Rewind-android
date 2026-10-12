@@ -16,7 +16,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.chizberg.rewind.domain.Direction
@@ -78,7 +77,6 @@ fun DirectionBadge(
             Text(
                 text = direction.name,
                 style = MaterialTheme.typography.labelLarge,
-                fontFamily = FontFamily.Monospace,
                 fontWeight = FontWeight.Bold,
             )
             // `aero` (top-down) has no bearing: iOS leaves the arrow pointing up.

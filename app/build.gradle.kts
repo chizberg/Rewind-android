@@ -23,6 +23,16 @@ android {
         versionCode = 1
         versionName = "1.0"
 
+        // Where the colorization graphs are served from (manifest.json + one zip per model). Not
+        // a secret, so it rides as a Gradle property rather than through local.properties: pass
+        // -Prewind.colorizationModelsUrl=… (or set it in ~/.gradle/gradle.properties) to point a
+        // build at another bucket. The default is the iOS host's Android prefix.
+        val colorizationModelsUrl =
+            providers
+                .gradleProperty("rewind.colorizationModelsUrl")
+                .getOrElse("https://rewind-models.y2nkvndwk7.workers.dev/models/android/v1")
+        buildConfigField("String", "COLORIZATION_MODELS_URL", "\"$colorizationModelsUrl\"")
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -129,6 +139,9 @@ dependencies {
     // Play throttles and may silently drop the flow; the app never learns whether anything was
     // shown, exactly as StoreKit never tells iOS either.
     implementation(libs.play.review.ktx)
+    // Colorization: the two graphs iOS runs on Core ML, here as ONNX on ONNX Runtime's CPU
+    // provider (see app/OrtColorizationModels.kt).
+    implementation(libs.onnxruntime.android)
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
     // The full-screen photo viewer (M9's "telephoto or hand-rolled" call): pan bounded to the

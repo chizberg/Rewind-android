@@ -3,6 +3,7 @@ package com.chizberg.rewind.app
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Matrix
+import android.hardware.display.DisplayManager
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
@@ -53,6 +54,12 @@ interface CameraPreviewHost {
  *
  * Lenses: iOS enumerates the physical cameras of its virtual device; CameraX reports a continuous
  * zoom range, so the picker is built out of brackets of it (see `Lens.kt`).
+ *
+ * Rotation: iOS 7e4c3dd hands both the preview and the photo output the angle of an
+ * `AVCaptureDevice.RotationCoordinator`. The CameraX equivalent is the use cases' `targetRotation`,
+ * kept on the display's rotation for as long as a preview is attached. A quarter turn rebuilds the
+ * activity and so re-attaches anyway; a half turn (landscape to the other landscape) does not, and
+ * only the display listener sees it — without it the shot would come out upside down.
  */
 class CameraXSession(
     context: Context,
@@ -92,6 +99,8 @@ class CameraXSession(
     private var camera: Camera? = null
     private var lifecycleOwner: LifecycleOwner? = null
     private var surfaceProvider: Preview.SurfaceProvider? = null
+    private var displayListener: DisplayManager.DisplayListener? = null
+    private val displayManager = appContext.getSystemService(DisplayManager::class.java)
 
     override fun requestAccess() {
         permissionRequestsMutable.tryEmit(Unit)
@@ -103,13 +112,41 @@ class CameraXSession(
     ) {
         surfaceProvider = previewView.surfaceProvider
         this.lifecycleOwner = lifecycleOwner
+        followRotation(previewView)
         bind()
     }
 
     override fun detach() {
+        displayListener?.let(displayManager::unregisterDisplayListener)
+        displayListener = null
         surfaceProvider = null
         lifecycleOwner = null
         stop()
+    }
+
+    private fun followRotation(previewView: PreviewView) {
+        // The activity's display rather than the view's: the view is not attached to a window yet
+        // when the composition hands it over, and `View.display` is null until it is.
+        val display = previewView.context.display ?: return
+
+        fun update() {
+            preview.targetRotation = display.rotation
+            imageCapture.targetRotation = display.rotation
+        }
+        update()
+        val listener =
+            object : DisplayManager.DisplayListener {
+                override fun onDisplayChanged(displayId: Int) {
+                    if (displayId == display.displayId) update()
+                }
+
+                override fun onDisplayAdded(displayId: Int) = Unit
+
+                override fun onDisplayRemoved(displayId: Int) = Unit
+            }
+        displayListener?.let(displayManager::unregisterDisplayListener)
+        displayManager.registerDisplayListener(listener, null)
+        displayListener = listener
     }
 
     /** iOS `session.start()`. Binding is what starts a CameraX session, so this only fires once a

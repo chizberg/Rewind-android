@@ -91,7 +91,7 @@
     <!-- M14: then/now comparison -->
     <string name="action_compare">Solishtirish</string>
     <string name="action_compare_street_view">Google Street View bilan solishtirish</string>
-    <string name="comparison_saved_to_photos">Fotolarga saqlandi</string>
+    <string name="saved_to_photos">Fotolarga saqlandi</string>
     <string name="comparison_retake">Qayta olish</string>
     <string name="comparison_style_side_by_side">Yonma-yon</string>
     <string name="comparison_style_card_on_card">Karta ustida karta</string>
@@ -103,4 +103,28 @@
     <string name="show_original">Asl nusxani ko\'rsatish</string>
     <!-- The language code of this folder, not a word to translate — see values/strings.xml. -->
     <string name="app_language">uz</string>
+
+    <!-- Colorization (iOS Localizable.xcstrings). -->
+    <string name="colorize">Rangli qilish</string>
+    <string name="colorization_model_default">Standart</string>
+    <string name="colorization_model_compact">Ixcham</string>
+    <string name="colorization_ddcolor_description">Yorqin, tabiiy ranglar. Ko\'pchilik fotosuratlar uchun yaxshi ishlaydi.</string>
+    <string name="colorization_eccv16_description">Kichikroq va tezroq. Ranglar yumshoqroq va aniqligi kamroq.</string>
+    <!-- Android-only: the download button's a11y label (iOS shows the glyph alone). -->
+    <string name="download">Yuklab olish</string>
+    <string name="delete">O\'chirish</string>
+    <string name="image_colorization">Rasmlarni rangli qilish</string>
+    <string name="pick_a_model">Model tanlash</string>
+    <string name="colorization_change_later">Modelni keyinroq Sozlamalardan o\'zgartirishingiz mumkin.</string>
+    <string name="colorization_model">Rangli qilish modeli</string>
+    <string name="colorization_feature_promo">bepul | qurilmada | ochiq kod</string>
+    <string name="colorization_feature_lead">Istalgan oq-qora fotosuratni soniyalar ichida rangli qiling.</string>
+    <string name="colorization_feature_free">Bepul, ro\'yxatdan o\'tish shart emas</string>
+    <string name="colorization_feature_download_once">Model faqat bir marta yuklab olinadi</string>
+    <string name="colorization_feature_seconds">Bitta fotosurat 3–10 soniya oladi</string>
+    <string name="colorization_feature_delete_anytime">Modelni istalgan vaqtda o\'chirib tashlashingiz mumkin</string>
+    <string name="colorization_no_color">Model rang qo\'sha olmaganga o\'xshaydi. Modellar xato qilishi mumkin, boshqasini sinab ko\'ring.</string>
+    <string name="colorization_only_tint">Rasm avvalgidan rangliroq bo\'lmaganga o\'xshaydi. Modellar xato qilishi mumkin, boshqasini sinab ko\'ring.</string>
+    <string name="onboarding_colorization_title">Fotosuratlarni ranglash</string>
+    <string name="onboarding_colorization_description">Oq-qora fotosuratlarga qurilmangizda rang qo\'shing. Bepul, ro\'yxatdan o\'tish shart emas.</string>
 </resources>

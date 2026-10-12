@@ -1,15 +1,24 @@
 package com.chizberg.rewind.features.details.ui
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -17,6 +26,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.aspectRatio
@@ -31,14 +41,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.CenterFocusWeak
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Directions
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.DownloadDone
+import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Panorama
 import androidx.compose.material.icons.rounded.Place
 import androidx.compose.material.icons.rounded.Public
@@ -51,11 +64,13 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -64,13 +79,26 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.LinkInteractionListener
@@ -81,13 +109,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.fromHtml
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImagePainter
 import com.chizberg.rewind.R
 import com.chizberg.rewind.app.RewindAlert
+import com.chizberg.rewind.colorization.ColorizationCheck
+import com.chizberg.rewind.colorization.WatermarkedImage
+import com.chizberg.rewind.colorization.image.ArgbImage
 import com.chizberg.rewind.domain.GradientScheme
 import com.chizberg.rewind.domain.ModelImage
+import com.chizberg.rewind.features.colorization.ui.ColorizationPickerScreen
 import com.chizberg.rewind.features.comparison.ui.ComparisonScreen
+import com.chizberg.rewind.features.details.ColorizationState
 import com.chizberg.rewind.features.details.ImageDetailsAction
 import com.chizberg.rewind.features.details.ImageDetailsModel
 import com.chizberg.rewind.features.details.ImageDetailsState
@@ -101,6 +138,11 @@ import com.chizberg.rewind.network.ImageQuality
 import com.chizberg.rewind.ui.DirectionBadge
 import com.chizberg.rewind.ui.ImageDateBadge
 import com.chizberg.rewind.ui.Overlay
+import com.chizberg.rewind.ui.SavedBanner
+import com.chizberg.rewind.ui.rainbowColors
+import com.chizberg.rewind.ui.rememberImageBitmap
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import me.saket.telephoto.zoomable.ZoomSpec
 import me.saket.telephoto.zoomable.coil3.ZoomableAsyncImage
 import me.saket.telephoto.zoomable.rememberZoomableImageState
@@ -179,6 +221,20 @@ fun ImageDetailsView(
 
     LaunchedEffect(model) { model(ImageDetailsAction.WillBePresented) }
 
+    // iOS cancels the colorization run with the model (`tetheredEffects`); ours lives on the shared
+    // scope, so leaving for good says so. A configuration change rebuilds the view, not the model.
+    val activity = LocalContext.current.findActivity()
+    DisposableEffect(model) {
+        onDispose {
+            if (activity?.isChangingConfigurations != true) model(ImageDetailsAction.Closed)
+        }
+    }
+
+    // Where the colorize button sits, for the effect's ripple to start from (iOS
+    // `colorizeButtonFrame`), in the screen's coordinates.
+    var colorizeButtonCenter by remember { mutableStateOf<Offset?>(null) }
+    val picture = pictureColorization(state, colorizeButtonCenter)
+
     // Backgrounds bleed under the system bars and the cutout (iOS `.ignoresSafeArea()` on the
     // backing rectangles); the safe area is padding *inside* them, never around them — padding the
     // screen itself would shrink the scroll viewport and leave dead strips top and bottom.
@@ -190,10 +246,25 @@ fun ImageDetailsView(
         Box(Modifier.fillMaxSize()) {
             BoxWithConstraints {
                 if (maxWidth >= SplitWidthThreshold) {
-                    SplitContent(state, scheme, maxRange, model)
+                    SplitContent(state, scheme, maxRange, model, picture)
                 } else {
-                    ScrollContent(state, scheme, maxRange, model)
+                    ScrollContent(state, scheme, maxRange, model, picture)
                 }
+            }
+
+            state.colorizationState.buttonPhase?.let { phase ->
+                ColorizeButton(
+                    phase = phase,
+                    onClick = { model(ImageDetailsAction.Colorize) },
+                    modifier =
+                        Modifier
+                            .align(Alignment.TopEnd)
+                            .safeDrawingPadding()
+                            .padding(8.dp)
+                            .onGloballyPositioned {
+                                colorizeButtonCenter = it.boundsInRoot().center
+                            },
+                )
             }
 
             BackButton(
@@ -223,7 +294,8 @@ fun ImageDetailsView(
     ) { shown ->
         FullscreenImage(
             image = shown,
-            isImageSaved = state.isImageSaved,
+            colorized = state.colorizedImage,
+            savesCount = state.imageSaveCount,
             onSave = { model(ImageDetailsAction.FullscreenPreview.SaveImage) },
             onDismiss = { model(ImageDetailsAction.FullscreenPreview.Dismiss) },
         )
@@ -239,6 +311,17 @@ fun ImageDetailsView(
         ComparisonScreen(
             deps = deps,
             onDismiss = { model(ImageDetailsAction.Comparison.Dismiss) },
+        )
+    }
+
+    // iOS presents the picker as a sheet zoomed out of the colorize button; here it is a layer.
+    Overlay(
+        target = state.colorizationPicker,
+        onBack = { model(ImageDetailsAction.ColorizationPicker.Dismiss) },
+    ) { picker ->
+        ColorizationPickerScreen(
+            model = picker,
+            onDismiss = { model(ImageDetailsAction.ColorizationPicker.Dismiss) },
         )
     }
 
@@ -273,6 +356,7 @@ private fun ScrollContent(
     scheme: GradientScheme,
     maxRange: IntRange,
     model: ImageDetailsModel,
+    picture: PictureColorization,
 ) {
     Column(
         Modifier
@@ -282,9 +366,12 @@ private fun ScrollContent(
     ) {
         DetailsPicture(
             image = state.image,
+            colorization = picture,
             onTap = { model(ImageDetailsAction.FullscreenPreview.Present) },
+            onLoaded = { model(ImageDetailsAction.ImageLoaded) },
             modifier = Modifier.fillMaxWidth(),
         )
+        ColorizationCheckRow(state, model::invoke)
         TextDetails(
             state = state,
             scheme = scheme,
@@ -319,6 +406,7 @@ private fun SplitContent(
     scheme: GradientScheme,
     maxRange: IntRange,
     model: ImageDetailsModel,
+    picture: PictureColorization,
 ) {
     Row(Modifier.fillMaxSize()) {
         Box(
@@ -333,7 +421,9 @@ private fun SplitContent(
             // cutout, and what shows through there is that black, not the screen's surface.
             DetailsPicture(
                 image = state.image,
+                colorization = picture,
                 onTap = { model(ImageDetailsAction.FullscreenPreview.Present) },
+                onLoaded = { model(ImageDetailsAction.ImageLoaded) },
                 modifier =
                     Modifier
                         .fillMaxSize()
@@ -357,6 +447,7 @@ private fun SplitContent(
                     ),
                 ),
         ) {
+            ColorizationCheckRow(state, model::invoke)
             TextDetails(
                 state = state,
                 scheme = scheme,
@@ -391,7 +482,9 @@ private fun SplitContent(
 @Composable
 private fun DetailsPicture(
     image: ModelImage,
+    colorization: PictureColorization,
     onTap: () -> Unit,
+    onLoaded: () -> Unit,
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.FillWidth,
     reserveSpace: Boolean = true,
@@ -401,6 +494,9 @@ private fun DetailsPicture(
             mutableStateOf<AsyncImagePainter.State>(AsyncImagePainter.State.Empty)
         }
     val nothingDrawn = state.painter == null
+    val loaded = state is AsyncImagePainter.State.Success
+    LaunchedEffect(loaded) { if (loaded) onLoaded() }
+    var pictureOrigin by remember { mutableStateOf(Offset.Zero) }
     val reserved =
         if (reserveSpace && nothingDrawn) Modifier.aspectRatio(PLACEHOLDER_ASPECT) else Modifier
     Box(
@@ -418,7 +514,37 @@ private fun DetailsPicture(
             placeholderQuality = ImageQuality.Medium,
             onState = { state = it },
         )
-        if (state !is AsyncImagePainter.State.Success) CircularProgressIndicator()
+        if (loaded) {
+            // iOS overlays the colorized photo and the effect on the photo itself, so both take
+            // exactly its frame: the painter's aspect, fitted the same way inside this box.
+            val aspect = state.painter?.intrinsicSize?.let { it.width / it.height } ?: 1f
+            Box(
+                Modifier
+                    .aspectRatio(aspect)
+                    .onGloballyPositioned { pictureOrigin = it.positionInRoot() },
+            ) {
+                Crossfade(colorization.colorized, label = "colorized") { colorized ->
+                    if (colorized != null) {
+                        Image(
+                            bitmap = colorized,
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.FillBounds,
+                        )
+                    } else {
+                        Spacer(Modifier.fillMaxSize())
+                    }
+                }
+                MagicOverlay(
+                    image = colorization.sample,
+                    origin = (colorization.buttonCenter ?: pictureOrigin) - pictureOrigin,
+                    isActive = colorization.isColorizing,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        } else {
+            CircularProgressIndicator()
+        }
     }
 }
 
@@ -750,7 +876,10 @@ private fun ActionButton(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Icon(button.icon(isFavorite, isImageSaved), contentDescription = null)
-            Text(button.label, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
+            // No line cap (iOS ee57003): a title too long even for a full-width row — a long
+            // translation in the narrow metadata column — wraps instead of being cut off, aligned
+            // to the leading edge (iOS f40e49c; Compose's default).
+            Text(button.label, style = MaterialTheme.typography.bodyLarge)
         }
     }
 }
@@ -886,7 +1015,8 @@ private val MapApp.appName: String
 @Composable
 private fun FullscreenImage(
     image: ModelImage,
-    isImageSaved: Boolean,
+    colorized: ArgbImage?,
+    savesCount: Int,
     onSave: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -905,14 +1035,34 @@ private fun FullscreenImage(
     val zoomed = (zoomable.zoomFraction ?: 0f) > 0f
     LaunchedEffect(zoomed) { controlsHidden = zoomed }
 
+    // iOS 0da82b1: the status bar goes with the controls, so a hidden chrome leaves the photo
+    // alone on screen. Only the status bar, as on iOS (its home indicator stays); a swipe from the
+    // edge brings it back transiently. Leaving the viewer always restores it.
+    val view = LocalView.current
+    DisposableEffect(view, controlsHidden) {
+        val window = view.context.findActivity()?.window
+        val insets = window?.let { WindowCompat.getInsetsController(it, view) }
+        insets?.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        if (controlsHidden) {
+            insets?.hide(WindowInsetsCompat.Type.statusBars())
+        } else {
+            insets?.show(WindowInsetsCompat.Type.statusBars())
+        }
+        onDispose { insets?.show(WindowInsetsCompat.Type.statusBars()) }
+    }
+
     Box(Modifier.fillMaxSize().background(Color.Black)) {
+        val request =
+            rememberRewindImageRequest(
+                path = image.imagePath,
+                quality = ImageQuality.High,
+                placeholderQuality = ImageQuality.Medium,
+            )
+        // iOS opens the viewer on `displayedImage`: the colorized photo while it is on screen.
+        val colorizedBitmap = rememberImageBitmap(colorized)?.asAndroidBitmap()
         ZoomableAsyncImage(
-            model =
-                rememberRewindImageRequest(
-                    path = image.imagePath,
-                    quality = ImageQuality.High,
-                    placeholderQuality = ImageQuality.Medium,
-                ),
+            model = colorizedBitmap ?: request,
             contentDescription = image.title,
             modifier = Modifier.fillMaxSize(),
             state = imageState,
@@ -938,11 +1088,205 @@ private fun FullscreenImage(
             ) {
                 BackButton(onClick = onDismiss)
                 OverlayButton(
-                    icon = saveIcon(isImageSaved),
+                    icon = saveIcon(isImageSaved = savesCount > 0),
                     contentDescription = stringResource(R.string.action_save_image),
                     onClick = onSave,
                 )
             }
         }
+        // iOS `ZoomableImageScreen`: the banner sits outside the controls' fade, so it shows even
+        // when a zoomed-in photo has hidden them.
+        SavedBanner(
+            savesCount = savesCount,
+            modifier =
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .safeDrawingPadding()
+                    .padding(top = 5.dp),
+        )
     }
 }
+
+private tailrec fun Context.findActivity(): Activity? =
+    when (this) {
+        is Activity -> this
+        is ContextWrapper -> baseContext.findActivity()
+        else -> null
+    }
+
+/** What the photo needs to know about colorization, resolved once per state. */
+private class PictureColorization(
+    val colorized: ImageBitmap?,
+    /** The photo the run works on, for the effect's blurred backdrop. */
+    val sample: WatermarkedImage?,
+    val isColorizing: Boolean,
+    val buttonCenter: Offset?,
+)
+
+@Composable
+private fun pictureColorization(
+    state: ImageDetailsState,
+    buttonCenter: Offset?,
+): PictureColorization {
+    // Converted as soon as the result is in, not on the first switch to it: the toggle back and
+    // forth then has a bitmap ready.
+    val ready = state.colorizationState as? ColorizationState.Ready
+    val bitmap = rememberImageBitmap(ready?.colorized)
+    val shown = bitmap?.takeIf { ready?.showing == ColorizationState.Showing.Colorized }
+    val sample = (state.colorizationState as? ColorizationState.Colorizing)?.image
+    return PictureColorization(shown, sample, state.isColorizing, buttonCenter)
+}
+
+/** iOS `ColorizeButton.Phase`. */
+private enum class ColorizePhase { Available, Colorizing, Done }
+
+private val ColorizationState.buttonPhase: ColorizePhase?
+    get() =
+        when (this) {
+            is ColorizationState.Available -> ColorizePhase.Available
+            is ColorizationState.Colorizing -> ColorizePhase.Colorizing
+            is ColorizationState.Ready ->
+                when (showing) {
+                    ColorizationState.Showing.Colorized -> ColorizePhase.Done
+                    ColorizationState.Showing.Original -> ColorizePhase.Available
+                }
+            ColorizationState.None,
+            ColorizationState.Detecting,
+            ColorizationState.NotAvailable,
+            -> null
+        }
+
+/**
+ * iOS `ColorizeButton` in the toolbar: the 🎨 emoji, a spinner in its place while the model runs,
+ * and once the colorized photo is on screen a white palette on a rainbow disc. It pops in on a
+ * spring, and the first time it shows a blurred rainbow spins behind it for two seconds (iOS
+ * `RainbowShadow`), the feature's one call for attention.
+ */
+@Composable
+private fun ColorizeButton(
+    phase: ColorizePhase,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val appear = remember { Animatable(0f) }
+    val angle = remember { Animatable(0f) }
+    var shadowShown by remember { mutableStateOf(true) }
+    LaunchedEffect(Unit) {
+        launch { appear.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy)) }
+        launch {
+            angle.animateTo(
+                targetValue = FULL_TURN * RAINBOW_TURNS,
+                animationSpec = tween(RAINBOW_SHADOW_MS, easing = LinearEasing),
+            )
+        }
+        delay(RAINBOW_SHADOW_MS.toLong())
+        shadowShown = false
+    }
+    val shadowAlpha by animateFloatAsState(if (shadowShown) 1f else 0f, label = "rainbowShadow")
+    val label = stringResource(R.string.colorize)
+    Box(
+        modifier.graphicsLayer {
+            scaleX = appear.value
+            scaleY = appear.value
+        },
+        contentAlignment = Alignment.Center,
+    ) {
+        if (shadowAlpha > 0f) {
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .graphicsLayer {
+                        alpha = shadowAlpha
+                        rotationZ = angle.value
+                        scaleX = RAINBOW_SHADOW_SCALE
+                        scaleY = RAINBOW_SHADOW_SCALE
+                    }.blur(RainbowShadowBlur, BlurredEdgeTreatment.Unbounded)
+                    .background(Brush.sweepGradient(rainbowColors()), CircleShape),
+            )
+        }
+        Surface(
+            onClick = onClick,
+            enabled = phase != ColorizePhase.Colorizing,
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            shadowElevation = 3.dp,
+            modifier = Modifier.semantics { contentDescription = label },
+        ) {
+            Crossfade(phase, label = "colorizePhase") { shown ->
+                Box(Modifier.size(ColorizeButtonSize), contentAlignment = Alignment.Center) {
+                    ColorizeGlyph(shown)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ColorizeGlyph(phase: ColorizePhase) {
+    when (phase) {
+        ColorizePhase.Available -> Text("🎨", fontSize = 20.sp)
+        ColorizePhase.Colorizing ->
+            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+        ColorizePhase.Done ->
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Brush.sweepGradient(rainbowColors(exposure = 0f)), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Rounded.Palette,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+    }
+}
+
+/** iOS `colorizationDescription(check:)`: why the result may look off, with a way to dismiss it. */
+@Composable
+private fun ColorizationCheckRow(
+    state: ImageDetailsState,
+    dispatch: (ImageDetailsAction) -> Unit,
+) {
+    val check = (state.colorizationState as? ColorizationState.Ready)?.check
+    val message =
+        when (check) {
+            ColorizationCheck.NoColor -> R.string.colorization_no_color
+            ColorizationCheck.OnlyTint -> R.string.colorization_only_tint
+            ColorizationCheck.Ok, null -> null
+        }
+    // The last message stays while the row animates away.
+    var shown by remember { mutableStateOf(R.string.colorization_no_color) }
+    if (message != null) shown = message
+    AnimatedVisibility(visible = message != null) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("🫤")
+            Text(
+                text = stringResource(shown),
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            IconButton(onClick = { dispatch(ImageDetailsAction.DismissColorizationCheck) }) {
+                Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.cancel))
+            }
+        }
+    }
+}
+
+private const val RAINBOW_SHADOW_MS = 2000
+
+/** iOS spins the shadow once a second for its two seconds. */
+private const val RAINBOW_TURNS = 2
+private const val FULL_TURN = 360f
+private const val RAINBOW_SHADOW_SCALE = 1.3f
+private val RainbowShadowBlur = 10.dp
+private val ColorizeButtonSize = 40.dp

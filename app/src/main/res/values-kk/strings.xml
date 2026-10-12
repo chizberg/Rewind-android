@@ -91,7 +91,7 @@
     <!-- M14: then/now comparison -->
     <string name="action_compare">Салыстыру</string>
     <string name="action_compare_street_view">Google Street View-мен салыстыру</string>
-    <string name="comparison_saved_to_photos">Фотоларға сақталды</string>
+    <string name="saved_to_photos">Фотоларға сақталды</string>
     <string name="comparison_retake">Қайта түсіру</string>
     <string name="comparison_style_side_by_side">Қатар</string>
     <string name="comparison_style_card_on_card">Карточка үстінде карточка</string>
@@ -103,4 +103,28 @@
     <string name="show_original">Түпнұсқаны көрсету</string>
     <!-- The language code of this folder, not a word to translate — see values/strings.xml. -->
     <string name="app_language">kk</string>
+
+    <!-- Colorization (iOS Localizable.xcstrings). -->
+    <string name="colorize">Түстендіру</string>
+    <string name="colorization_model_default">Әдепкі</string>
+    <string name="colorization_model_compact">Ықшам</string>
+    <string name="colorization_ddcolor_description">Қанық әрі табиғи түстер. Көптеген суреттер үшін жақсы нәтиже береді.</string>
+    <string name="colorization_eccv16_description">Кішірек әрі жылдамырақ. Түстері жұмсағырақ, дәлдігі төменірек.</string>
+    <!-- Android-only: the download button's a11y label (iOS shows the glyph alone). -->
+    <string name="download">Жүктеп алу</string>
+    <string name="delete">Жою</string>
+    <string name="image_colorization">Суретті түстендіру</string>
+    <string name="pick_a_model">Модель таңдаңыз</string>
+    <string name="colorization_change_later">Модельді кейінірек Параметрлерде өзгертуге болады</string>
+    <string name="colorization_model">Түстендіру моделі</string>
+    <string name="colorization_feature_promo">тегін | құрылғыда | ашық код</string>
+    <string name="colorization_feature_lead">Кез келген ақ-қара суретке бірнеше секундта түс беріңіз.</string>
+    <string name="colorization_feature_free">Тегін, тіркелудің қажеті жоқ</string>
+    <string name="colorization_feature_download_once">Модель бір рет қана жүктеледі</string>
+    <string name="colorization_feature_seconds">Бір сурет шамамен 3–10 секундта боялады</string>
+    <string name="colorization_feature_delete_anytime">Модельді қалаған уақытта жоюға болады</string>
+    <string name="colorization_no_color">Модель түс қоса алмаған сияқты. Модельдер қателесуі мүмкін, басқасын байқап көріңіз.</string>
+    <string name="colorization_only_tint">Сурет бұрынғыдан қанық бола қойған жоқ сияқты. Модельдер қателесуі мүмкін, басқасын байқап көріңіз.</string>
+    <string name="onboarding_colorization_title">Суреттерді бояу</string>
+    <string name="onboarding_colorization_description">Ақ-қара суреттерге құрылғыңызда түс қосыңыз. Тегін, тіркелудің қажеті жоқ.</string>
 </resources>

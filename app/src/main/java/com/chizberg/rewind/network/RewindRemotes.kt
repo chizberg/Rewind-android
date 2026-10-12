@@ -39,10 +39,14 @@ data class TranslateParams(
 
 /**
  * Builds the production remotes over [requestPerformer]. Port of iOS
- * `RewindRemotes.init(requestPerformer:imageLoader:)`. Divergence: no image loader — the DTO
- * `file` path is carried into [ModelImage]/[ModelCluster] for Coil to load later.
+ * `RewindRemotes.init(requestPerformer:imageLoader:imageDetailsLoader:)`. Divergence: no image
+ * loader — the DTO `file` path is carried into [ModelImage]/[ModelCluster] for Coil to load later.
+ * Image details go through [imageDetailsLoader]'s cache, as on iOS.
  */
-operator fun RewindRemotes.Companion.invoke(requestPerformer: RequestPerformer): RewindRemotes {
+operator fun RewindRemotes.Companion.invoke(
+    requestPerformer: RequestPerformer,
+    imageDetailsLoader: ImageDetailsLoader = ImageDetailsLoader(requestPerformer),
+): RewindRemotes {
     val annotations =
         Remote<AnnotationLoadingParams, Pair<List<ModelImage>, List<ModelCluster>>> { params ->
             // The whole load stays off the caller's thread: the reducer scope is Main.immediate,
@@ -63,7 +67,7 @@ operator fun RewindRemotes.Companion.invoke(requestPerformer: RequestPerformer):
         }.exponentialBackoff()
     val imageDetails =
         Remote<Int, ModelImageDetails> { cid ->
-            ModelImageDetails(requestPerformer.perform(Request.imageDetails(cid)))
+            imageDetailsLoader.load(cid)
         }.exponentialBackoff()
     // No `exponentialBackoff()` on either Google remote, exactly as on iOS: the two PastVu remotes
     // above are wrapped, these two are not. A retried metadata lookup would only delay the

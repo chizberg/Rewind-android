@@ -17,6 +17,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -110,7 +112,7 @@ fun CameraViewfinder(
  *
  * The panorama starts at the photo's coordinate, facing the way the photo was shot when PastVu
  * knows the direction (iOS passes `heading` only when `dir != nil` and lets Google choose
- * otherwise).
+ * otherwise) — unless [memory] has a view the user already turned to, see [PanoramaMemory].
  *
  * Its "shot" is a copy of the pixels on screen — iOS renders its web view into an image, and a
  * panorama draws into a surface of its own, which only [PixelCopy] can read back (a Compose
@@ -121,28 +123,17 @@ fun StreetViewViewfinder(
     image: ModelImage,
     renderer: ComparisonRenderer,
     zoom: PanoramaZoom,
+    memory: PanoramaMemory,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val panorama =
-        remember(context) {
-            StreetViewPanoramaView(
-                context,
-                StreetViewPanoramaOptions()
-                    .position(image.coordinate.toLatLng())
-                    .apply {
-                        image.dir?.angleDegrees?.let { heading ->
-                            panoramaCamera(
-                                StreetViewPanoramaCamera
-                                    .Builder()
-                                    .bearing(heading)
-                                    .build(),
-                            )
-                        }
-                    },
-            )
-        }
+    val panorama = remember(context) { StreetViewPanoramaView(context, memory.options(image)) }
     PanoramaLifecycle(panorama)
+
+    DisposableEffect(memory, panorama) {
+        panorama.getStreetViewPanoramaAsync { api -> memory.bind(api) }
+        onDispose { memory.bind(null) }
+    }
 
     DisposableEffect(renderer, panorama) {
         renderer.viewfinder = { CapturedBitmap(panorama.copyPixels()) }
@@ -155,6 +146,59 @@ fun StreetViewViewfinder(
     }
 
     AndroidView(modifier = modifier.clipToBounds(), factory = { panorama })
+}
+
+/**
+ * Where the user has turned the panorama: which one (they can walk along the street) and the
+ * camera in it. Android-only — iOS keeps its web view alive through a rotation, while ours is
+ * rebuilt with the activity, and would open again at the photo's heading.
+ *
+ * Read off the bound panorama when it goes (a shot replaces the viewfinder) and when the activity
+ * saves its state ([Saver], via `rememberSaveable`), which is the last moment the old panorama is
+ * still there to ask.
+ */
+@Stable
+class PanoramaMemory(
+    private var panoramaId: String? = null,
+    private var camera: StreetViewPanoramaCamera? = null,
+) {
+    private var panorama: StreetViewPanorama? = null
+
+    internal fun bind(api: StreetViewPanorama?) {
+        capture()
+        panorama = api
+    }
+
+    internal fun options(image: ModelImage): StreetViewPanoramaOptions {
+        val options = StreetViewPanoramaOptions()
+        panoramaId?.let(options::panoramaId) ?: options.position(image.forcedCoordinate.toLatLng())
+        val initialCamera =
+            camera
+                ?: image.dir?.angleDegrees?.let { heading ->
+                    StreetViewPanoramaCamera.Builder().bearing(heading).build()
+                }
+        initialCamera?.let(options::panoramaCamera)
+        return options
+    }
+
+    private fun capture() {
+        val api = panorama ?: return
+        api.location?.panoId?.let { panoramaId = it }
+        camera = api.panoramaCamera
+    }
+
+    companion object {
+        val Saver: Saver<PanoramaMemory, Any> =
+            listSaver(
+                save = { memory ->
+                    memory.capture()
+                    listOf(memory.panoramaId, memory.camera)
+                },
+                restore = { saved ->
+                    PanoramaMemory(saved[0] as String?, saved[1] as StreetViewPanoramaCamera?)
+                },
+            )
+    }
 }
 
 /**

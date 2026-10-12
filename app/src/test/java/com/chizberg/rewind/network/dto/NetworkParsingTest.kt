@@ -2,6 +2,7 @@ package com.chizberg.rewind.network.dto
 
 import com.chizberg.rewind.Fixture
 import com.chizberg.rewind.domain.ModelCluster
+import com.chizberg.rewind.domain.ModelImageDetails
 import kotlinx.serialization.decodeFromString
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -104,8 +105,20 @@ class NetworkParsingTest {
         assertEquals("uploaded by nb92", details.watersignText)
         // The HTML <a href=...> source is kept as-is.
         assertTrue(details.source!!.contains("<a href="))
-        assertEquals(44.813047, details.geo[0], TOL)
-        assertEquals(20.460579, details.geo[1], TOL)
+        val geo = details.geo!!
+        assertEquals(44.813047, geo[0], TOL)
+        assertEquals(20.460579, geo[1], TOL)
+    }
+
+    /** Mirror of iOS `detailsWithoutGeoDecodeToNilCoordinate`: `giveForPage` omits `geo` for a
+     * photo without coordinates (recorded from the real API, cid 2394944), and that is not a
+     * parsing error. */
+    @Test
+    fun detailsWithoutGeoDecodeToNilCoordinate() {
+        val details = decodeDetails("imageDetails_noGeo.json")
+        assertEquals(2_394_944, details.cid)
+        assertNull(details.geo)
+        assertNull(ModelImageDetails(details).coordinate)
     }
 
     // Model.Cluster mapping (reversed preview coordinate quirk)
@@ -118,7 +131,8 @@ class NetworkParsingTest {
         assertEquals(50.072674, cluster.coordinate.latitude, TOL)
         assertEquals(14.443844, cluster.coordinate.longitude, TOL)
         // Preview coordinate IS reversed: server sent [lon, lat] -> flipped to (lat, lon).
-        assertEquals(50.072229, cluster.preview.coordinate.latitude, TOL)
-        assertEquals(14.444176, cluster.preview.coordinate.longitude, TOL)
+        val previewCoordinate = cluster.preview.coordinate!!
+        assertEquals(50.072229, previewCoordinate.latitude, TOL)
+        assertEquals(14.444176, previewCoordinate.longitude, TOL)
     }
 }

@@ -27,10 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,20 +42,23 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImagePainter
 import com.chizberg.rewind.app.CapturedBitmap
+import com.chizberg.rewind.colorization.image.ArgbImage
 import com.chizberg.rewind.domain.ModelImage
 import com.chizberg.rewind.features.comparison.ComparisonState
 import com.chizberg.rewind.features.map.ui.RewindAsyncImage
 import com.chizberg.rewind.network.ImageQuality
+import com.chizberg.rewind.ui.rememberImageBitmap
 import java.time.LocalDate
 
-/** iOS `CardOnCardView.scale` / `.radius`, and its `3/4` fallback aspect for the cards. */
+/** iOS `CardOnCardView.scale` / `.radius`. */
 private const val CARD_SCALE = 0.6f
 private val CARD_RADIUS = 10.dp
-private const val DEFAULT_OLD_ASPECT = 3f / 4f
 
 /**
  * iOS renders the divider row at a flat `.system(size: 11)` — a *whole* font, not just a size. The
@@ -118,32 +118,51 @@ private const val WORDMARK = "Rewind <<"
 fun ComparisonView(
     style: ComparisonState.Style,
     oldImage: ModelImage,
+    oldColorized: ArgbImage?,
     captureState: ComparisonState.CaptureState?,
     streetViewYear: Int?,
     shotsCount: Int,
+    oldAspect: Float,
+    onOldAspectLoaded: (Float) -> Unit,
     viewfinder: @Composable (Modifier) -> Unit,
     recorder: Modifier,
     modifier: Modifier = Modifier,
 ) {
     val currentYear = remember { LocalDate.now().year }
-    // iOS takes the card aspect from the decoded old image; ours learns it from Coil when the
-    // photo lands (the reducer holds no bitmap), until then the same 3:4 iOS falls back to.
-    var oldAspect by remember(oldImage.cid) { mutableFloatStateOf(DEFAULT_OLD_ASPECT) }
 
+    val colorizedBitmap = rememberImageBitmap(oldColorized)
+    LaunchedEffect(oldColorized) {
+        oldColorized?.let { onOldAspectLoaded(it.width.toFloat() / it.height) }
+    }
     val old: @Composable (Modifier) -> Unit = { innerModifier ->
-        RewindAsyncImage(
-            path = oldImage.imagePath,
-            contentDescription = oldImage.title,
-            modifier = innerModifier,
-            quality = ImageQuality.High,
-            contentScale = ContentScale.Crop,
-            placeholderQuality = ImageQuality.Medium,
-            onState = { state ->
-                (state as? AsyncImagePainter.State.Success)?.painter?.intrinsicSize?.let { size ->
-                    if (size.width > 0f && size.height > 0f) oldAspect = size.width / size.height
-                }
-            },
-        )
+        if (colorizedBitmap != null) {
+            Image(
+                bitmap = colorizedBitmap,
+                contentDescription = oldImage.title,
+                modifier = innerModifier,
+                contentScale = ContentScale.Crop,
+            )
+        } else {
+            RewindAsyncImage(
+                path = oldImage.imagePath,
+                contentDescription = oldImage.title,
+                modifier = innerModifier,
+                quality = ImageQuality.High,
+                contentScale = ContentScale.Crop,
+                placeholderQuality = ImageQuality.Medium,
+                onState = { state ->
+                    // iOS takes the card aspect from the decoded old image; ours learns it from
+                    // Coil when the photo lands (the reducer holds no bitmap) and hands it to
+                    // the state, which lays the screen out around it.
+                    val success = state as? AsyncImagePainter.State.Success
+                    success?.painter?.intrinsicSize?.let { size ->
+                        if (size.width > 0f && size.height > 0f) {
+                            onOldAspectLoaded(size.width / size.height)
+                        }
+                    }
+                },
+            )
+        }
     }
     val new: @Composable (Modifier) -> Unit = { innerModifier ->
         NewFrame(captureState, viewfinder, innerModifier)
@@ -282,6 +301,27 @@ private fun CardOnCardView(
         )
     }
 }
+
+/**
+ * Where the live half's top trailing corner sits in a canvas [canvasWidth] wide, so chrome that
+ * belongs to the viewfinder (the panorama's zoom) can float over it rather than over the canvas's
+ * own corner: side by side that is the canvas's corner, card on card it is the corner of the "now"
+ * card — the canvas's corner there holds the year label and the wordmark.
+ */
+internal fun viewfinderTopEnd(
+    style: ComparisonState.Style,
+    canvasWidth: Dp,
+): DpOffset =
+    when (style) {
+        ComparisonState.Style.SideBySide -> DpOffset(canvasWidth, 0.dp)
+        // The cards fill the padded canvas (its shape is the old photo's) and shrink towards
+        // their own corner, the "now" one towards the top leading.
+        ComparisonState.Style.CardOnCard ->
+            DpOffset(
+                CardStackPadding + (canvasWidth - CardStackPadding * 2) * CARD_SCALE,
+                CardStackPadding,
+            )
+    }
 
 /** iOS `.opacity(0.5)` on the wordmark. */
 private const val WORDMARK_ALPHA = 0.5f

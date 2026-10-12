@@ -67,23 +67,23 @@
     <string name="onboarding_get_started">Los geht\'s</string>
     <string name="onboarding_lets_see">Los geht\'s!</string>
     <string name="onboarding_history_near_you_title">Geschichte in deiner Nähe</string>
-    <string name="onboarding_history_near_you_description">Sie können alte\u00A0Fotos und\u00A0Gemälde von\u00A0Orten auf\u00A0der\u00A0Karte ansehen</string>
+    <string name="onboarding_history_near_you_description">Du kannst alte\u00A0Fotos und\u00A0Gemälde von\u00A0Orten auf\u00A0der\u00A0Karte ansehen</string>
     <string name="onboarding_images_saving_title">Speichere deine Favoriten</string>
     <string name="onboarding_images_saving_description">Erstelle eine\u00A0Sammlung deiner spektakulärsten Momente und\u00A0Orte</string>
     <string name="onboarding_comparison_title">Vergleiche Vergangenheit und Gegenwart</string>
-    <string name="onboarding_comparison_description">Nutzen Sie Ihre Kamera, um denselben Ort im Laufe der Zeit zu vergleichen</string>
+    <string name="onboarding_comparison_description">Nutze deine Kamera, um denselben Ort im Laufe der Zeit zu vergleichen</string>
     <string name="onboarding_street_view_title">Street View</string>
-    <string name="onboarding_street_view_description">Sehen Sie, wie der Ort heute aussieht – mit Google Street View</string>
+    <string name="onboarding_street_view_description">Schau dir an, wie der Ort heute aussieht – mit Google Street View</string>
     <string name="onboarding_translate_title">Übersetzen</string>
-    <string name="onboarding_translate_description">Beschreibungen in einer Fremdsprache können mit einem Fingertipp in Ihre Sprache übersetzt werden</string>
+    <string name="onboarding_translate_description">Beschreibungen in einer Fremdsprache können mit einem Fingertipp in deine Sprache übersetzt werden</string>
     <string name="onboarding_history_on_a_map">Geschichte auf einer Karte</string>
     <string name="onboarding_what_do_images_look_like">Wie sehen die Bilder aus?</string>
     <string name="onboarding_single_image_title">Einzelbild</string>
-    <string name="onboarding_single_image_description">Zeigt die Richtung an. Tippen Sie darauf, um die Bilddetails anzuzeigen</string>
+    <string name="onboarding_single_image_description">Zeigt die Richtung an. Tippe darauf, um die Bilddetails anzuzeigen</string>
     <string name="onboarding_group_of_images_title">Bildergruppe</string>
     <string name="onboarding_group_of_images_description">Mehrere Bilder, die nahe beieinander liegen. Öffnet beim Antippen eine vollständige Liste</string>
     <string name="onboarding_cluster_of_images_title">Bildergruppe</string>
-    <string name="onboarding_cluster_of_images_description">Eine große Gruppe von Bildern. Um alle anzuzeigen, müssen Sie hineinzoomen</string>
+    <string name="onboarding_cluster_of_images_description">Eine große Gruppe von Bildern. Um alle anzuzeigen, musst du hineinzoomen</string>
     <string name="onboarding_date">Jedes Bild hat einen Standort und ein Datum. Dem Datum entspricht eine Farbe</string>
     <string name="onboarding_pastvu">Rewind verwendet die PastVu-API, um alle historischen Fotos, Gemälde und die zugehörigen Daten abzurufen.</string>
     <string name="onboarding_location">Rewind benötigt deinen Standort, um Fotos und Gemälde in deiner Nähe anzuzeigen. Ohne diese Berechtigung kannst du die App trotzdem nutzen</string>
@@ -91,7 +91,7 @@
     <!-- M14: then/now comparison -->
     <string name="action_compare">Vergleichen</string>
     <string name="action_compare_street_view">Mit Google Street View vergleichen</string>
-    <string name="comparison_saved_to_photos">In Fotos gesichert</string>
+    <string name="saved_to_photos">In Fotos gesichert</string>
     <string name="comparison_retake">Neu aufnehmen</string>
     <string name="comparison_style_side_by_side">Nebeneinander</string>
     <string name="comparison_style_card_on_card">Karte auf Karte</string>
@@ -103,4 +103,28 @@
     <string name="show_original">Original anzeigen</string>
     <!-- The language code of this folder, not a word to translate — see values/strings.xml. -->
     <string name="app_language">de</string>
+
+    <!-- Colorization (iOS Localizable.xcstrings). -->
+    <string name="colorize">Kolorieren</string>
+    <string name="colorization_model_default">Standard</string>
+    <string name="colorization_model_compact">Kompakt</string>
+    <string name="colorization_ddcolor_description">Lebendige, natürliche Farben. Gut geeignet für die meisten Fotos.</string>
+    <string name="colorization_eccv16_description">Kleiner und schneller. Die Farben sind weicher und weniger genau.</string>
+    <!-- Android-only: the download button's a11y label (iOS shows the glyph alone). -->
+    <string name="download">Herunterladen</string>
+    <string name="delete">Löschen</string>
+    <string name="image_colorization">Bildkolorierung</string>
+    <string name="pick_a_model">Wähle ein Modell</string>
+    <string name="colorization_change_later">Du kannst das Modell später in den Einstellungen ändern.</string>
+    <string name="colorization_model">Kolorierungsmodell</string>
+    <string name="colorization_feature_promo">kostenlos | auf dem Gerät | Open Source</string>
+    <string name="colorization_feature_lead">Bring Farbe in jedes Schwarz-Weiß-Foto – in Sekunden.</string>
+    <string name="colorization_feature_free">Kostenlos, kein Konto nötig</string>
+    <string name="colorization_feature_download_once">Das Modell lädst du nur einmal herunter</string>
+    <string name="colorization_feature_seconds">Ein Foto dauert etwa 3–10 Sekunden</string>
+    <string name="colorization_feature_delete_anytime">Lösche das Modell, wann immer du willst</string>
+    <string name="colorization_no_color">Es sieht so aus, als hätte das Modell keine Farbe hinzufügen können. Modelle machen Fehler, du kannst ein anderes ausprobieren.</string>
+    <string name="colorization_only_tint">Es sieht aus, als wäre das Bild nicht farbiger geworden. Modelle machen Fehler, du kannst ein anderes ausprobieren.</string>
+    <string name="onboarding_colorization_title">Bilder kolorieren</string>
+    <string name="onboarding_colorization_description">Bring Farbe in Schwarz-Weiß-Fotos – direkt auf deinem Gerät. Kostenlos, kein Konto nötig.</string>
 </resources>

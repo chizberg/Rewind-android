@@ -11,12 +11,19 @@ import coil3.ImageLoader
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import com.chizberg.rewind.BuildConfig
 import com.chizberg.rewind.R
+import com.chizberg.rewind.colorization.ColorizationManifest
+import com.chizberg.rewind.colorization.ColorizationModelId
+import com.chizberg.rewind.colorization.ColorizationModelStore
+import com.chizberg.rewind.colorization.colorizationManifestRequest
 import com.chizberg.rewind.core.redux.Property
 import com.chizberg.rewind.core.redux.Reducer
-import com.chizberg.rewind.core.util.OrientationLock
 import com.chizberg.rewind.domain.ImageSorting
 import com.chizberg.rewind.domain.ModelImage
 import com.chizberg.rewind.domain.ModelImageDetails
+import com.chizberg.rewind.domain.StreetViewAvailability
+import com.chizberg.rewind.features.colorization.ColorizationPickerModel
+import com.chizberg.rewind.features.colorization.makeColorizationPickerModel
+import com.chizberg.rewind.features.comparison.CaptureKind
 import com.chizberg.rewind.features.comparison.ComparisonRenderer
 import com.chizberg.rewind.features.comparison.ComparisonState
 import com.chizberg.rewind.features.comparison.ComparisonViewDeps
@@ -39,6 +46,9 @@ import com.chizberg.rewind.features.onboarding.makeOnboardingViewModel
 import com.chizberg.rewind.features.search.makeSearchModel
 import com.chizberg.rewind.features.settings.SettingsState
 import com.chizberg.rewind.features.settings.makeSettingsViewModel
+import com.chizberg.rewind.network.DownloadPerformer
+import com.chizberg.rewind.network.ImageDetailsLoader
+import com.chizberg.rewind.network.Remote
 import com.chizberg.rewind.network.RequestPerformer
 import com.chizberg.rewind.network.RewindRemotes
 import com.chizberg.rewind.network.invoke
@@ -55,7 +65,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
@@ -105,22 +114,73 @@ class AppGraph(
             .decoderCoroutineContext(Dispatchers.Default.limitedParallelism(2))
             .build()
 
-    private val remotes =
-        RewindRemotes(
-            RequestPerformer(
-                okHttpRequestPerformer(
-                    OkHttpClient
-                        .Builder()
-                        // Only translation needs it; see the interceptor for why the other Google
-                        // endpoint doesn't.
-                        .addInterceptor(AndroidClientInterceptor(appContext))
-                        .build(),
-                ),
-            ),
-        )
+    /** One client for the process: one dispatcher, one connection pool. */
+    private val httpClient =
+        OkHttpClient
+            .Builder()
+            // Only translation needs it; see the interceptor for why the other Google endpoint
+            // doesn't.
+            .addInterceptor(AndroidClientInterceptor(appContext))
+            .build()
+
+    private val requestPerformer = RequestPerformer(okHttpRequestPerformer(httpClient))
+
+    /** iOS `ImageDetailsLoader`: the details remote reads through it, the details factory seeds
+     *  each new screen from it. */
+    private val imageDetailsLoader = ImageDetailsLoader(requestPerformer)
+
+    private val remotes = RewindRemotes(requestPerformer, imageDetailsLoader)
 
     /** Gallery / share sheet, both fed from [imageLoader]'s cache. */
     private val imageExport = ImageExport(appContext, imageLoader)
+
+    /** iOS `remotes.colorizationManifest`: the model host's list, read by the store and the
+     *  picker. */
+    private val colorizationManifest =
+        Remote<Unit, ColorizationManifest> {
+            requestPerformer.perform(
+                colorizationManifestRequest(BuildConfig.COLORIZATION_MODELS_URL),
+            )
+        }
+
+    /** The settings field the picker writes, as iOS's `settings.colorizationModel.asProperty()`. */
+    private val pickedColorizationModel: Property<ColorizationModelId?> by lazy {
+        Property(
+            getter = { settings.value.colorizationModel },
+            setter = { id -> settings.value = settings.value.copy(colorizationModel = id) },
+        )
+    }
+
+    /** iOS `makeColorizationPicker`: [colorize] is the photo's "colorize now", null from settings. */
+    private fun makeColorizationPicker(colorize: (() -> Unit)?): ColorizationPickerModel =
+        makeColorizationPickerModel(
+            modelStore = colorizationModelStore,
+            pickedModel = pickedColorizationModel,
+            manifest = colorizationManifest,
+            colorize = colorize,
+            scope = scope,
+        )
+
+    /** Port of iOS `ColorizationModelStore`. The graphs live in `noBackupFilesDir` — iOS marks its
+     *  directory `isExcludedFromBackup`; hundreds of megabytes the host serves again do not belong
+     *  in a backup. The archive is downloaded into the cache directory, but unpacked next to the
+     *  graphs: a file keeps the group of the directory it was created in, and one born in the
+     *  cache would be counted as cache for as long as it is installed. */
+    private val colorizationModelStore =
+        ColorizationModelStore(
+            downloadPerformer =
+                DownloadPerformer(
+                    client = httpClient,
+                    temporaryDirectory = File(appContext.cacheDir, "downloads"),
+                    scope = scope,
+                ),
+            manifest = colorizationManifest,
+            baseUrl = BuildConfig.COLORIZATION_MODELS_URL,
+            modelsDirectory = File(appContext.noBackupFilesDir, "ColorizationModels"),
+            temporaryDirectory = File(appContext.noBackupFilesDir, "ColorizationModels.partial"),
+            makeModel = { id, file -> makeOrtColorizationModel(appContext, id, file) },
+            scope = scope,
+        )
 
     private val urlOpener: (String) -> Unit = { url ->
         runCatching {
@@ -286,14 +346,6 @@ class AppGraph(
             openAppSettings = openAppSettings,
         )
 
-    // What screen, if any, is currently holding the device in one orientation. Port of iOS's
-    // `AppGraph.orientationLock` property, which its AppDelegate answers
-    // `supportedInterfaceOrientationsFor` out of; here [OrientationLockHost] collects it in the
-    // root view and sets `requestedOrientation`.
-    private val orientationLockMutable = MutableStateFlow<OrientationLock?>(null)
-
-    val orientationLock: StateFlow<OrientationLock?> = orientationLockMutable
-
     /**
      * One comparison screen, built the moment its button is tapped. Port of the
      * `makeComparisonViewDeps` call iOS makes inline inside its details reducer.
@@ -303,7 +355,7 @@ class AppGraph(
      * snapshots with, and a fresh orientation sensor subscription. The availability remote is bound
      * to this photo's coordinate right here, mirroring iOS's `.mapArgs { modelImage.coordinate }`.
      */
-    private val comparisonFactory: ComparisonFactory = { image, mode ->
+    private val comparisonFactory: ComparisonFactory = { image, mode, colorized ->
         val renderer = ComparisonRenderer()
         val cameraSession =
             when (mode) {
@@ -311,8 +363,8 @@ class AppGraph(
                 ComparisonState.CaptureMode.StreetView -> null
             }
         // The screen's own scope: same main dispatcher as every other reducer, but a job of its
-        // own, so closing the screen ends the orientation-sensor subscription that
-        // `Reducer.adding` starts (on iOS the tracker simply dies with the model).
+        // own, so closing the screen ends the camera-events subscription that `Reducer.adding`
+        // starts (on iOS it simply dies with the model).
         val presentationScope =
             CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job]))
         ComparisonViewDeps(
@@ -320,19 +372,25 @@ class AppGraph(
                 makeComparisonModel(
                     captureMode = mode,
                     oldImage = image,
+                    oldColorized = colorized,
+                    // iOS guards a photo without coordinates here (the button is hidden for it, so
+                    // this is never reached) and answers `.unavailable`.
                     streetViewAvailability =
-                        remotes.streetViewAvailability.mapArgs { _: Unit -> image.coordinate },
+                        Remote { _: Unit ->
+                            image.coordinate?.let { remotes.streetViewAvailability.load(it) }
+                                ?: StreetViewAvailability.Unavailable
+                        },
                     cameraSession = cameraSession,
                     renderer = renderer,
-                    orientation = deviceOrientation(appContext),
                     haptics = haptics,
-                    saveImage = { captured ->
-                        imageExport.save(captured.bitmap(), comparisonFileName(image.cid))
+                    saveOldImage = imageExport::save,
+                    saveImage = { captured, kind ->
+                        imageExport.save(captured.bitmap(), comparisonFileName(image.cid, kind))
                     },
                     shareImage = { captured, title, url ->
                         imageExport.share(
                             bitmap = captured.bitmap(),
-                            fileName = comparisonFileName(image.cid),
+                            fileName = comparisonFileName(image.cid, CaptureKind.Comparison),
                             title = title,
                             // iOS joins the same two items into the text it shares beside the
                             // image (`makeShareVC`: title, no description, url).
@@ -359,6 +417,7 @@ class AppGraph(
         makeImageDetailsModel(
             modelImage = image,
             remote = remotes.imageDetails,
+            cachedDetails = imageDetailsLoader.cached(image.cid),
             openSource = source,
             // The star reads/writes the shared favorites reducer through iOS's `isFavorite(_:)`
             // bimap store (cid membership + a toggle lifted to add/remove). Recreating the store per
@@ -377,7 +436,12 @@ class AppGraph(
             saveImage = imageExport::save,
             shareImage = imageExport::share,
             makeComparison = comparisonFactory,
-            setOrientationLock = { orientationLockMutable.value = it },
+            loadPixels = imageExport::pixels,
+            // Read on every tap, like iOS's `Variable`: a model picked or deleted meanwhile counts.
+            colorizationModel = {
+                settings.value.colorizationModel?.let(colorizationModelStore::localModel)
+            },
+            makeColorizationPicker = { colorize -> makeColorizationPicker(colorize) },
             translate = remotes.translate,
             detectLanguage = languageDetector,
             haptics = haptics,
@@ -427,6 +491,7 @@ class AppGraph(
             urlOpener = urlOpener,
             haptics = haptics,
             scope = scope,
+            makeColorizationPicker = { makeColorizationPicker(null) },
         )
     }
 
@@ -466,6 +531,18 @@ class AppGraph(
         )
 
     init {
+        // Port of iOS `AppGraph`'s memory-warning observer: under memory pressure the cached image
+        // details and the loaded colorization graph go. (iOS clears its own image cache there
+        // too; Coil trims its memory cache on the same callbacks by itself.) The callback captures
+        // the loader and the store only, not the graph.
+        val detailsLoader = imageDetailsLoader
+        val modelStore = colorizationModelStore
+        appContext.registerComponentCallbacks(
+            MemoryPressureObserver {
+                detailsLoader.clearCache()
+                modelStore.clearCache()
+            },
+        )
         // Port of iOS `AppGraph.init`'s last line, and it lands in the same place for the same
         // reason: the graph is built once per process. `RewindViewModel` holds it across activity
         // recreation, so a rotation — or any other configuration change — is not a launch. (An
