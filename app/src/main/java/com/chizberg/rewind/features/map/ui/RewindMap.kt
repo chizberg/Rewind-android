@@ -1,21 +1,15 @@
 package com.chizberg.rewind.features.map.ui
 
 import android.graphics.Bitmap
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.calculateTargetValue
-import androidx.compose.animation.splineBasedDecay
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -24,40 +18,37 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.util.VelocityTracker
-import androidx.compose.ui.input.pointer.util.addPointerInputChange
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.ImageLoader
+import com.chizberg.rewind.R
 import com.chizberg.rewind.core.redux.Reducer
 import com.chizberg.rewind.domain.Coordinate
 import com.chizberg.rewind.domain.GradientScheme
+import com.chizberg.rewind.domain.ImageSorting
+import com.chizberg.rewind.domain.ModelImage
 import com.chizberg.rewind.domain.ModelLocalCluster
 import com.chizberg.rewind.domain.Region
 import com.chizberg.rewind.domain.Span
 import com.chizberg.rewind.domain.zoom
+import com.chizberg.rewind.features.imagelist.ui.EmptyListPlaceholder
 import com.chizberg.rewind.features.map.AnnotationValue
 import com.chizberg.rewind.features.map.CameraFocus
 import com.chizberg.rewind.features.map.MapAction
 import com.chizberg.rewind.features.map.MapState
-import com.chizberg.rewind.features.map.Minimization
-import com.chizberg.rewind.features.map.PreviewCard
+import com.chizberg.rewind.features.map.ToolbarKind
 import com.chizberg.rewind.features.map.coordinate
 import com.chizberg.rewind.features.map.key
 import com.google.android.gms.maps.CameraUpdateFactory
@@ -100,35 +91,13 @@ private const val TAP_TARGET_DP = 48f
 // How much a cluster tap zooms in, centred on the cluster (iOS MapModel: `currentZoom + 1`).
 private const val CLUSTER_ZOOM_STEP = 1f
 
-// First-frame guess for the strip's height, used until it reports its measured size (avoids a
-// visible marker/logo jump on the first layout). Real height replaces it once the strip is laid out.
-private val InitialStripHeight = 210.dp
-
-// Gap between the floating filter toolbar and the preview strip below it.
-private val FiltersGap = 8.dp
-
-// How much of the strip stays on screen once the controls fold away (iOS `glimpseHeight`).
-private val Glimpse = 50.dp
-
-// The folded strip's dimming and shrink — iOS `content.opacity(0.5)` and
-// `scaleEffect(0.9, anchor: .top)` on the card. The menu row above only travels; it keeps its size.
-private const val MINIMIZED_ALPHA = 0.5f
-private const val MINIMIZED_SCALE = 0.9f
-
-// Thresholds of the strip's own drag, 1:1 with iOS `MapControlsHiding`: dragging down past 60% of
-// the fold distance folds it, as does a fling predicted to land twice that distance away; dragging
-// back up past 30% restores it, as does a fling predicted to end above the strip's top edge.
-private const val MINIMIZE_COEFFICIENT = 0.6f
-private const val MINIMIZE_ACCELERATION_COEFFICIENT = 2f
-private const val MAXIMIZE_COEFFICIENT = 0.3f
-
 /**
  * The map surface. Port of iOS `RewindMap`. Each camera idle hands the visible region + zoom to
  * [mapModel], which debounces, loads, clusters, and cancels in-flight loads; the map renders
  * `state.annotations` declaratively via [AnnotationOverlay] (Composables on top of the map, not SDK
  * markers, so they scale-pop in/out like iOS). Models and the shared Coil [imageLoader] are owned by
- * [com.chizberg.rewind.app.AppGraph] and injected here; tapping an annotation or a preview card is
- * routed up via [onAnnotationClick] / [onCardClick]. [focusRequests] recenters the camera (the
+ * [com.chizberg.rewind.app.AppGraph] and injected here; tapping an annotation or a sheet card is
+ * routed up via [onAnnotationClick] / [onImageClick]. [focusRequests] recenters the camera (the
  * Android stand-in for iOS `focusOn`).
  *
  * [onMapLoaded] is passed in rather than dispatched here because iOS gates it: its equivalent lives
@@ -142,11 +111,12 @@ fun RewindMap(
     scheme: GradientScheme,
     focusRequests: Flow<CameraFocus>,
     openClusterPreviews: () -> Boolean,
-    onCardClick: (PreviewCard) -> Unit,
+    sorting: ImageSorting,
+    onSortingChange: (ImageSorting) -> Unit,
+    onImageClick: (ModelImage) -> Unit,
     onAnnotationClick: (AnnotationValue) -> Unit,
     onLocalClusterClick: (ModelLocalCluster) -> Unit,
     onFavoritesClick: () -> Unit,
-    onViewAsListClick: () -> Unit,
     onSearchClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onMapLoaded: () -> Unit,
@@ -165,15 +135,14 @@ fun RewindMap(
         remember(state.clusters, state.clusteredImages) { state.annotations }
 
     val localDensity = LocalDensity.current
+    val isCompactHeight =
+        with(localDensity) {
+            LocalWindowInfo.current.containerSize.height
+                .toDp()
+        } < CompactHeight
+    val menuEndPadding = if (isCompactHeight) SearchCapsuleInset + MenuGap else MenuPaddingH
     val density = localDensity.density
     val context = LocalContext.current
-    // The strip's measured height, fed back to the map's bottom padding (keeps the Google logo above
-    // it) and to the overlay (so marker placement matches the padded map center). Dynamic because it
-    // includes the device's navigation-bar / home-indicator inset.
-    var stripHeight by remember { mutableStateOf(InitialStripHeight) }
-    // The whole controls column — menu row plus strip — which is what the map is inset by (see
-    // [mapBottomPadding]). Measured, like the strip: the menu grows when the year selector unfolds.
-    var controlsHeight by remember { mutableStateOf(InitialStripHeight) }
     // All icon rasterization and delivery machinery (Android-only, see AnnotationIconPipeline).
     val iconPipeline =
         remember(imageLoader) {
@@ -257,75 +226,9 @@ fun RewindMap(
         }
     }
 
-    // How far the controls travel when folded away (iOS `glassCardHeight - glimpseHeight`). Ours
-    // follows the measured strip, since its height is not a constant — it carries the navigation
-    // bar's inset and grows when the year selector unfolds.
-    val minimizedOffset = (stripHeight - Glimpse).coerceAtLeast(0.dp)
-    val minimizedOffsetPx = with(localDensity) { minimizedOffset.toPx() }
-    val isMinimized = state.controls.minimization.isMinimized
-    // The platform's own fling projection, standing in for UIKit's `predictedEndLocation`.
-    val decay = remember(localDensity) { splineBasedDecay<Float>(localDensity) }
-    // How far down the controls currently sit — ONE value, as iOS keeps one `offset`, rather than a
-    // spring plus a separate live drag: summing those two makes the release jump, since the drag
-    // part resets to zero a frame before the spring has anything to animate from.
-    val foldOffset = remember { Animatable(0f) }
-    val foldScope = rememberCoroutineScope()
-    var draggingStrip by remember { mutableStateOf(false) }
-    // Every fold the finger did not perform (the map drag, its 2s unfold, a tap on the folded strip)
-    // springs from wherever the controls are to where the state says they belong.
-    LaunchedEffect(isMinimized, minimizedOffsetPx) {
-        if (!draggingStrip) {
-            foldOffset.animateTo(if (isMinimized) minimizedOffsetPx else 0f, PanelSpring)
-        }
-    }
-    val stripAlpha by animateFloatAsState(
-        targetValue = if (isMinimized) MINIMIZED_ALPHA else 1f,
-        animationSpec = PanelSpring,
-        label = "stripAlpha",
-    )
-    val stripScale by animateFloatAsState(
-        targetValue = if (isMinimized) MINIMIZED_SCALE else 1f,
-        animationSpec = PanelSpring,
-        label = "stripScale",
-    )
-    // The map's bottom padding — the whole controls stack, as iOS insets by `controls.size.height`
-    // (its VStack of the menu row *and* the card), not by the card alone. That is what puts the
-    // Google logo above the floating menu instead of behind it.
-    //
-    // It follows the fold on the controls' own spring, so the logo travels with them (iOS animates
-    // the same inset through `updateBottomInset` -> `UIView.animate(mapControlsAnimation)`), and the
-    // annotation overlay is handed this very same value.
-    //
-    // Sharing it is not a nicety, it is the whole correctness argument. `GoogleMap.setPadding` is
-    // not MapKit's `layoutMargins`: setting it re-places the SDK's own controls but does not
-    // re-render the camera (measured: the base map moves 0 px), while the *next* camera change does
-    // honour it. So a value the overlay does not share tears the markers off the map on the next
-    // zoom, and a value the map has not yet applied tears them off during the fold. Hence the nudge
-    // below: each new padding is pushed into the SDK the same frame, and map, markers and logo move
-    // as one.
-    val insetOffset by animateFloatAsState(
-        targetValue = if (isMinimized) minimizedOffsetPx else 0f,
-        animationSpec = PanelSpring,
-        label = "mapBottomInset",
-    )
-    val mapBottomPadding = controlsHeight - with(localDensity) { insetOffset.toDp() }
-
-    // Re-aim the camera at its own position whenever the inset moves: that is what makes the SDK
-    // apply the fresh padding to what is on screen, instead of sitting on the last frame it drew.
-    // The target LatLng never changes — only where the SDK draws it — so this recentres the map the
-    // way MapKit's animated `layoutMargins` does, and the region change it produces is the honest
-    // one (the visible area really did grow).
-    //
-    // Watches the padding's BOTH inputs, not just the fold spring: `controlsHeight` moves on its
-    // own when the year selector unfolds (or the strip's inset changes), and a nudge-less padding
-    // change is exactly the tear described above — the overlay re-centres immediately while the
-    // base map sits on its last-drawn frame, so every marker slides by half the height delta until
-    // the next camera move. (Reproduced on device: opening the selector walked markers ~70px off
-    // the map.) The expression must live inside snapshotFlow — `mapBottomPadding` itself is a
-    // plain local recomputed per composition, reading it here would capture one stale value and
-    // never re-fire.
+    val mapBottomPadding = state.bottomInset.dp
     LaunchedEffect(cameraPositionState) {
-        snapshotFlow { controlsHeight - with(localDensity) { insetOffset.toDp() } }
+        snapshotFlow { state.bottomInset }
             .drop(1)
             .collect {
                 cameraPositionState.move(
@@ -374,7 +277,7 @@ fun RewindMap(
                 } else {
                     ComposeMapColorScheme.LIGHT
                 },
-            // Keep the Google logo and any attribution above the bottom preview strip. The same
+            // Keep the Google logo and any attribution above the region sheet. The same
             // inset is handed to the overlay so its marker placement matches the map's target.
             contentPadding = PaddingValues(bottom = mapBottomPadding),
             // The blue dot (iOS `showsUserLocation = true`). Strictly tied to the granted flag:
@@ -420,194 +323,101 @@ fun RewindMap(
             iconPipeline = iconPipeline,
             contentPaddingBottom = mapBottomPadding,
         )
-        // The floating menu sits directly above the preview strip (port of the iOS FloatingMenu row
-        // over the bottom card); both are pinned to the bottom edge as one column. The strip still
-        // reports only its own height back for the map padding + marker placement.
-        // Leading-aligned, like iOS `MapControls`' `VStack(alignment: .leading)`: once the menu
-        // stops filling the width (landscape, where it caps out) it hugs the side rather than
-        // floating in the middle of the map.
-        Column(
-            // Menu and strip travel together when folded away, as iOS puts the same `offset(y:)` on
-            // both halves of its `VStack`.
-            modifier =
-                Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .onSizeChanged {
-                        controlsHeight = with(localDensity) { it.height.toDp() }
-                    }.graphicsLayer { translationY = foldOffset.value },
-            horizontalAlignment = Alignment.Start,
+        AnimatedVisibility(
+            visible = state.toolbarKind == ToolbarKind.Map,
+            modifier = Modifier.align(Alignment.TopCenter),
+            enter = fadeIn(ChromeFade),
+            exit = fadeOut(ChromeFade),
+        ) {
+            MapTopBar(
+                locationAccessGranted = state.locationState.isAccessGranted,
+                isCompactHeight = isCompactHeight,
+                onSearchClick = onSearchClick,
+                onLocationClick = { mapModel(MapAction.External.Ui.LocationButtonTapped) },
+            )
+        }
+        AnimatedVisibility(
+            visible = state.toolbarKind == ToolbarKind.Map,
+            modifier = Modifier.align(Alignment.BottomCenter),
+            enter = fadeIn(ChromeFade),
+            exit = fadeOut(ChromeFade),
         ) {
             FloatingMenu(
                 filters = state.filters,
                 scheme = scheme,
                 mapType = state.mapType,
-                expandedItems = state.controls.expandedItems,
+                isTimePickerVisible = state.controls.isTimePickerVisible,
                 onFiltersChanged = { mapModel(MapAction.External.Ui.FiltersChanged(it)) },
                 onMapTypeChanged = { mapModel(MapAction.External.Ui.MapTypeSelected(it)) },
-                onExpandedItemsChanged = {
+                onTimePickerVisibleChanged = {
                     mapModel(
                         MapAction.External.Ui.Controls
-                            .SetExpandedItems(it),
+                            .SetTimePickerVisible(it),
                     )
                 },
-                // iOS routes the search glyph to `AppAction.search(.present)`, not to the map
-                // reducer — so does this one, through the root view.
-                onSearchClick = onSearchClick,
-                // The location glyph, unlike search, is the map reducer's own business (iOS
-                // `.locationTap` -> `.right(.locationButtonTapped)`).
-                locationAccessGranted = state.locationState.isAccessGranted,
-                onLocationClick = {
-                    mapModel(MapAction.External.Ui.LocationButtonTapped)
-                },
-                // Side insets stay inside FloatingMenu (they belong to the animated node there —
-                // see its expansion comment); only the gap above the strip is set here.
                 modifier =
                     Modifier
                         .windowInsetsPadding(
                             WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal),
-                        ).padding(vertical = FiltersGap),
+                        ).padding(
+                            start = MenuPaddingH,
+                            end = menuEndPadding,
+                            bottom = mapBottomPadding + MenuGap,
+                        ),
             )
-            Box(
-                // The strip's own fold gesture — port of iOS `MapControlsHiding`, installed by the
-                // parent `MapControls` there and by the parent here for the same reason: the state
-                // it decides belongs to the controls as a whole, not to the strip's own view.
-                // Vertical only, and the cards' `LazyRow` inside is offered every event first (a
-                // descendant is, in the main pass), so it claims horizontal scrolls before this ever
-                // sees them — which is the job iOS gives `scrollDisabled(isVerticalDrag)`.
-                modifier =
-                    Modifier.pointerInput(mapModel) {
-                        val velocity = VelocityTracker()
-                        var startY = 0f
-                        var dragTotal = 0f
-                        var base = 0f
-                        detectVerticalDragGestures(
-                            onDragStart = { position ->
-                                startY = position.y
-                                dragTotal = 0f
-                                base = foldOffset.value
-                                draggingStrip = true
-                                velocity.resetTracking()
-                                foldScope.launch { foldOffset.stop() }
-                            },
-                            onVerticalDrag = { change, delta ->
-                                dragTotal += delta
-                                velocity.addPointerInputChange(change)
-                                foldScope.launch { foldOffset.snapTo(base + dragTotal) }
-                            },
-                            // Let go without deciding anything and the controls spring back to
-                            // wherever the state has them (iOS's `@GestureState` unwinds the same).
-                            onDragCancel = {
-                                draggingStrip = false
-                                foldScope.launch {
-                                    foldOffset.animateTo(
-                                        if (isMinimized) minimizedOffsetPx else 0f,
-                                        PanelSpring,
-                                    )
-                                }
-                            },
-                            onDragEnd = {
-                                val fold = (stripHeight - Glimpse).coerceAtLeast(0.dp).toPx()
-                                // iOS weighs a fling by `predictedEndLocation` — a *position*
-                                // within the card, not a translation — so the prediction here is
-                                // also a position, and the thresholds keep its scale.
-                                val predictedEnd =
-                                    decay.calculateTargetValue(
-                                        startY + dragTotal,
-                                        velocity.calculateVelocity().y,
-                                    )
-                                val folded = state.controls.minimization.isMinimized
-                                val target =
-                                    when {
-                                        !folded &&
-                                            (
-                                                dragTotal >= fold * MINIMIZE_COEFFICIENT ||
-                                                    predictedEnd >=
-                                                    fold * MINIMIZE_ACCELERATION_COEFFICIENT
-                                            ) -> Minimization.Minimized(byUser = true)
-
-                                        folded &&
-                                            (
-                                                dragTotal <= -fold * MAXIMIZE_COEFFICIENT ||
-                                                    predictedEnd <= -fold
-                                            ) -> Minimization.Normal
-
-                                        else -> null
-                                    }
-                                // Settle from where the finger left the controls, not from where
-                                // the state was a moment ago — the spring's start is the last
-                                // dragged position.
-                                val settlesFolded =
-                                    (target ?: state.controls.minimization)
-                                        .isMinimized
-                                draggingStrip = false
-                                foldScope.launch {
-                                    foldOffset.animateTo(
-                                        if (settlesFolded) fold else 0f,
-                                        PanelSpring,
-                                    )
-                                }
-                                target?.let {
-                                    mapModel(
-                                        MapAction.External.Ui.Controls
-                                            .SetMinimization(it),
-                                    )
-                                }
-                            },
-                        )
-                    },
-            ) {
-                PreviewStrip(
-                    previews = state.previews,
-                    isLoading = state.isLoading,
-                    scheme = scheme,
-                    maxRange = maxRange,
-                    onCardClick = onCardClick,
-                    onFavoritesClick = onFavoritesClick,
-                    onViewAsListClick = onViewAsListClick,
-                    onSettingsClick = onSettingsClick,
-                    modifier =
-                        Modifier
-                            .onSizeChanged {
-                                val height = with(localDensity) { it.height.toDp() }
-                                stripHeight = height
-                                // The band a map drag has to reach to fold the controls. iOS
-                                // declares it as a constant; ours is measured (iOS `sizeChanged`).
-                                mapModel(
-                                    MapAction.External.Ui.Controls
-                                        .SizeChanged(height.value),
-                                )
-                            }.graphicsLayer {
-                                scaleX = stripScale
-                                scaleY = stripScale
-                                // Anchored at the top edge, iOS `scaleEffect(anchor: .top)`.
-                                transformOrigin =
-                                    TransformOrigin(pivotFractionX = 0.5f, pivotFractionY = 0f)
-                            },
-                    contentAlpha = { stripAlpha },
-                )
-                if (isMinimized) {
-                    // A tap on the folded strip brings it back, and until then it swallows taps so
-                    // the dimmed cards underneath cannot be hit (iOS's clear overlay on the card).
-                    // It covers the strip only — the menu row above stays live, as it does there.
-                    Box(
-                        Modifier
-                            .matchParentSize()
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                            ) {
-                                mapModel(
-                                    MapAction.External.Ui.Controls
-                                        .SetMinimization(Minimization.Normal),
-                                )
-                            },
-                    )
-                }
-            }
         }
+        RegionImagesSheet(
+            detent = state.sheetDetent,
+            images = state.currentRegionImages,
+            showsMapChrome = state.toolbarKind == ToolbarKind.Map,
+            isLoading = state.isLoading,
+            sorting = sorting,
+            emptyResultCount = state.emptyResultCount,
+            placeholders =
+                if (state.filters.isRangeModified) {
+                    EmptyListPlaceholder.map
+                } else {
+                    EmptyListPlaceholder.general
+                },
+            hint = state.emptyHint,
+            scheme = scheme,
+            maxRange = maxRange,
+            onStateChanged = { detent, visibleHeight, showsSheetToolbar ->
+                mapModel(
+                    MapAction.External.Ui.Sheet.StateChanged(
+                        detent,
+                        visibleHeight,
+                        showsSheetToolbar,
+                    ),
+                )
+            },
+            onSetDetent = {
+                mapModel(
+                    MapAction.External.Ui.Sheet
+                        .SetDetent(it),
+                )
+            },
+            onImageClick = onImageClick,
+            onSortingChange = onSortingChange,
+            onFavoritesClick = onFavoritesClick,
+            onSettingsClick = onSettingsClick,
+        )
     }
 }
+
+private val MapState.emptyHint: Int?
+    get() =
+        when {
+            filters.isRangeModified -> R.string.hint_widen_years
+            filters.imageKind.isPainting -> R.string.hint_switch_to_photos
+            region.span.latitudeDelta <= ZOOMED_OUT_LATITUDE_SPAN -> R.string.hint_move_or_zoom_out
+            else -> null
+        }
+
+private const val ZOOMED_OUT_LATITUDE_SPAN = 60.0
+private val MenuPaddingH = 25.dp
+private val MenuGap = 10.dp
+private val CompactHeight = 480.dp
 
 /**
  * One transparent SDK marker per annotation, positioned at its coordinate — the map's native,

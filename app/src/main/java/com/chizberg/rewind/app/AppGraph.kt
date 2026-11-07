@@ -62,6 +62,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -265,6 +266,8 @@ class AppGraph(
     // source.
     private val settingsFlow = MutableStateFlow(settingsStorage.value)
 
+    val sortingChanges: Flow<ImageSorting> = settingsFlow.map { it.sorting }.distinctUntilChanged()
+
     private val settings: Property<SettingsState> =
         Property(
             getter = { settingsFlow.value },
@@ -282,7 +285,7 @@ class AppGraph(
     // The image-list sort order — iOS `settings.asVariable().map(\.sorting)`, kept as a Property so
     // the list reducer keeps the synchronous get/set it expects. Shared with the map so its
     // previews follow the same order.
-    private val imageSorting: Property<ImageSorting> =
+    val imageSorting: Property<ImageSorting> =
         Property(
             getter = { settings.value.sorting },
             setter = { newSorting -> settings.value = settings.value.copy(sorting = newSorting) },
@@ -523,7 +526,6 @@ class AppGraph(
             settingsModelFactory = settingsModelFactory,
             favoritesModel = favoritesModel,
             onboardingModel = onboardingModel,
-            currentRegionImages = { mapModel.state.value.currentRegionImages },
             sorting = imageSorting,
             requestReview = { reviewPrompter.request() },
             initialGradientScheme = settings.value.gradientScheme,
@@ -549,16 +551,14 @@ class AppGraph(
         // activity that genuinely finishes would clear the ViewModel and count one more launch, but
         // back on the map minimises the task instead of finishing; see MainActivity.)
         reviewPrompter.appLaunched()
-        // Port of iOS `AppGraph`: `settings.sorting.onChange { mapModel(.internal(.updatePreviews)) }`.
+        // Port of iOS `AppGraph`: `settings.sorting.onChange { mapModel(.internal(.updateRegionImages)) }`.
         // A sort change made in a list's menu writes [imageSorting]; the map shares that order, so
-        // its previews re-sort immediately instead of waiting for the next region change. `drop(1)`
-        // skips the initial value — the map sorts on its own first load anyway.
+        // its region images re-sort immediately instead of waiting for the next region change.
+        // `drop(1)` skips the initial value — the map sorts on its own first load anyway.
         scope.launch {
-            settingsFlow
-                .map { it.sorting }
-                .distinctUntilChanged()
+            sortingChanges
                 .drop(1)
-                .collect { mapModel(MapAction.Internal.UpdatePreviews) }
+                .collect { mapModel(MapAction.Internal.UpdateRegionImages(afterLoad = false)) }
         }
         // Port of iOS `settings.gradientScheme.onChange { appModel(.setGradientScheme($0)) }`: the
         // scheme is picked in Settings but lives in the app state, whence every tinted surface

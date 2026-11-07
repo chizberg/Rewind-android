@@ -17,10 +17,7 @@
     <string name="action_save_image">Guardar imagen</string>
     <string name="action_view_on_web">Ver en la web</string>
     <string name="action_find_route">Buscar ruta</string>
-    <string name="preview_no_images">Aún no hay nada aquí</string>
-    <string name="preview_view_as_list">Ver como lista</string>
     <string name="list_favorites">Favoritos</string>
-    <string name="list_on_the_map">En el mapa</string>
     <string name="cluster">Grupo de imágenes</string>
     <string name="list_empty">Aún no hay nada aquí</string>
     <string name="image_kind_photos">Fotos</string>
@@ -127,4 +124,14 @@
     <string name="colorization_only_tint">Parece que la imagen no ha ganado color. Los modelos se equivocan, puedes probar con otro.</string>
     <string name="onboarding_colorization_title">Colorear fotos</string>
     <string name="onboarding_colorization_description">Añade color a las fotos en blanco y negro en tu dispositivo. Gratis, sin registro.</string>
+    <string name="hint_widen_years">Intenta ampliar el rango de años</string>
+    <string name="hint_switch_to_photos">Intenta cambiar a fotos</string>
+    <string name="hint_move_or_zoom_out">Intenta mover el mapa o alejarlo</string>
+    <string name="placeholder_nothing_in_sight">Nada a la vista</string>
+    <string name="placeholder_all_quiet">Todo tranquilo por aquí</string>
+    <string name="placeholder_empty_for_now">Vacío por ahora</string>
+    <string name="placeholder_nothing_found">Aún no se ha encontrado nada</string>
+    <string name="placeholder_no_traces">Aún no hay huellas</string>
+    <string name="placeholder_nothing_to_show">Aún no hay nada que mostrar</string>
+    <string name="placeholder_nothing_from_this_time">Nada de esta época</string>
 </resources>

@@ -17,10 +17,7 @@
     <string name="action_save_image">Enregistrer l\'image</string>
     <string name="action_view_on_web">Voir sur le Web</string>
     <string name="action_find_route">Trouver l\'itinéraire</string>
-    <string name="preview_no_images">Rien ici pour l\'instant</string>
-    <string name="preview_view_as_list">Afficher en liste</string>
     <string name="list_favorites">Favoris</string>
-    <string name="list_on_the_map">Sur la carte</string>
     <string name="cluster">Groupe</string>
     <string name="list_empty">Rien ici pour l\'instant</string>
     <string name="image_kind_photos">Photos</string>
@@ -127,4 +124,14 @@
     <string name="colorization_only_tint">On dirait que l\'image n\'est pas devenue plus colorée. Les modèles font des erreurs, vous pouvez en essayer un autre.</string>
     <string name="onboarding_colorization_title">Coloriser les photos</string>
     <string name="onboarding_colorization_description">Ajoutez de la couleur aux photos en noir et blanc directement sur votre appareil. Gratuit, sans inscription.</string>
+    <string name="hint_widen_years">Essayez d’élargir la plage d’années</string>
+    <string name="hint_switch_to_photos">Essayez de passer aux photos</string>
+    <string name="hint_move_or_zoom_out">Essayez de déplacer la carte ou de dézoomer</string>
+    <string name="placeholder_nothing_in_sight">Rien en vue</string>
+    <string name="placeholder_all_quiet">Tout est calme ici</string>
+    <string name="placeholder_empty_for_now">Vide pour l’instant</string>
+    <string name="placeholder_nothing_found">Rien trouvé pour l’instant</string>
+    <string name="placeholder_no_traces">Aucune trace pour l’instant</string>
+    <string name="placeholder_nothing_to_show">Rien à afficher pour l’instant</string>
+    <string name="placeholder_nothing_from_this_time">Rien de cette époque</string>
 </resources>

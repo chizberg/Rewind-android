@@ -31,7 +31,7 @@ sealed interface MapAction {
              * The finger moved while panning the map (iOS `userDragged(CGPoint, CGRect)`, fed by a
              * `UIPanGestureRecognizer` on the map view itself; here by an observing `pointerInput`
              * around the map — see `RewindMap`). Both values are in dp, and both are raw: the
-             * reducer, not the view, decides whether the touch is inside the controls' band.
+             * reducer, not the view, decides whether the touch is near the sheet.
              *
              * Fires on every movement of the gesture, exactly as iOS's `handlePan` does.
              */
@@ -61,27 +61,22 @@ sealed interface MapAction {
                 val mapType: MapType,
             ) : Ui
 
-            /** Port of iOS `MapAction.External.UI.controls`. */
             sealed interface Controls : Ui {
-                data class SetExpandedItems(
-                    val items: Set<MapControlItem>,
+                data class SetTimePickerVisible(
+                    val isVisible: Boolean,
                 ) : Controls
+            }
 
-                /**
-                 * The user folded or unfolded the controls by hand — dragging the strip down/up, or
-                 * tapping a minimized strip to bring it back (iOS `setMinimization`).
-                 */
-                data class SetMinimization(
-                    val minimization: Minimization,
-                ) : Controls
+            sealed interface Sheet : Ui {
+                data class StateChanged(
+                    val detent: SheetDetent,
+                    val visibleHeight: Float,
+                    val showsSheetToolbar: Boolean,
+                ) : Sheet
 
-                /**
-                 * The strip measured itself (iOS `sizeChanged`, which carries the whole `CGSize`;
-                 * only the height is ever read). See `ControlsState.heightDp`.
-                 */
-                data class SizeChanged(
-                    val heightDp: Float,
-                ) : Controls
+                data class SetDetent(
+                    val detent: SheetDetent,
+                ) : Sheet
             }
         }
 
@@ -113,10 +108,11 @@ sealed interface MapAction {
             val clusters: List<ModelCluster>,
         ) : Internal
 
-        data object UpdatePreviews : Internal
+        data class UpdateRegionImages(
+            val afterLoad: Boolean,
+        ) : Internal
 
-        /** The 2s debounce after an automatic minimize expired (iOS `unfoldMapControlsBack`). */
-        data object UnfoldMapControlsBack : Internal
+        data object UnfoldSheetBack : Internal
 
         data object ClearAnnotations : Internal
     }

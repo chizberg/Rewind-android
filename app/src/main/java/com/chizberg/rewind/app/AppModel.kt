@@ -70,8 +70,6 @@ sealed interface AppAction {
 
         data object PresentFavorites : ImageList
 
-        data object PresentCurrentRegionImages : ImageList
-
         data object Dismiss : ImageList
     }
 
@@ -131,8 +129,7 @@ typealias SettingsModelFactory = () -> SettingsModel
  *   gesture, no selection state to clear), so dismiss only closes the overlay and pokes
  *   [requestReview] — the store-review counter (`ReviewPrompter`). `imageList(.dismiss)` likewise
  *   only clears the list (its `previewClosed` is beside the point too).
- * - [favoritesModel] feeds the live Favorites list; [currentRegionImages] snapshots the visible
- *   region for the "On the map" list (both mirror iOS's `favoritesModel` / `currentRegionImages`).
+ * - [favoritesModel] feeds the live Favorites list (iOS `favoritesModel`).
  *
  * [onboardingModel] is passed in already built — or null when the flag says it has been seen (iOS
  * hands `makeAppModel` the same optional) — and simply seeds the initial state.
@@ -144,7 +141,6 @@ fun makeAppModel(
     settingsModelFactory: SettingsModelFactory,
     favoritesModel: FavoritesModel,
     onboardingModel: OnboardingModel?,
-    currentRegionImages: () -> List<ModelImage>,
     sorting: Property<ImageSorting>,
     requestReview: () -> Unit,
     initialGradientScheme: GradientScheme,
@@ -194,19 +190,6 @@ fun makeAppModel(
                             listUpdates = favoritesModel.state.drop(1),
                             imageDetailsFactory = imageDetailsFactory,
                             sorting = null,
-                            scope = scope,
-                        ),
-                )
-
-            AppAction.ImageList.PresentCurrentRegionImages ->
-                state.copy(
-                    previewedList =
-                        makeImageListModel(
-                            title = R.string.list_on_the_map,
-                            images = currentRegionImages(),
-                            listUpdates = emptyFlow(),
-                            imageDetailsFactory = imageDetailsFactory,
-                            sorting = sorting,
                             scope = scope,
                         ),
                 )

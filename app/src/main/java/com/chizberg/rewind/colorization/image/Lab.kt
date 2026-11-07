@@ -70,7 +70,7 @@ object Lab {
 
     /** Y of CIE XYZ: the Y row of the sRGB -> XYZ matrix for D65. */
     @Suppress("MagicNumber")
-    private fun luminance(
+    internal fun luminance(
         r: Float,
         g: Float,
         b: Float,

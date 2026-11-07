@@ -17,10 +17,7 @@
     <string name="action_save_image">Rasmni saqlash</string>
     <string name="action_view_on_web">Vebda ko\'rish</string>
     <string name="action_find_route">Yo\'nalishni topish</string>
-    <string name="preview_no_images">Bu yerda hali hech narsa yo\'q</string>
-    <string name="preview_view_as_list">Roʻyxat koʻrinishida koʻrish</string>
     <string name="list_favorites">Sevimlilar</string>
-    <string name="list_on_the_map">Xaritada</string>
     <string name="cluster">Klaster</string>
     <string name="list_empty">Bu yerda hali hech narsa yo\'q</string>
     <string name="image_kind_photos">Fotosuratlar</string>
@@ -127,4 +124,14 @@
     <string name="colorization_only_tint">Rasm avvalgidan rangliroq bo\'lmaganga o\'xshaydi. Modellar xato qilishi mumkin, boshqasini sinab ko\'ring.</string>
     <string name="onboarding_colorization_title">Fotosuratlarni ranglash</string>
     <string name="onboarding_colorization_description">Oq-qora fotosuratlarga qurilmangizda rang qo\'shing. Bepul, ro\'yxatdan o\'tish shart emas.</string>
+    <string name="hint_widen_years">Yillar oraligʻini kengaytirib koʻring</string>
+    <string name="hint_switch_to_photos">Fotosuratlarga oʻtib koʻring</string>
+    <string name="hint_move_or_zoom_out">Xaritani surib yoki kichraytirib koʻring</string>
+    <string name="placeholder_nothing_in_sight">Hech narsa koʻrinmaydi</string>
+    <string name="placeholder_all_quiet">Bu yer tinch</string>
+    <string name="placeholder_empty_for_now">Hozircha boʻsh</string>
+    <string name="placeholder_nothing_found">Hozircha hech narsa topilmadi</string>
+    <string name="placeholder_no_traces">Hozircha iz yoʻq</string>
+    <string name="placeholder_nothing_to_show">Hozircha koʻrsatadigan narsa yoʻq</string>
+    <string name="placeholder_nothing_from_this_time">Bu davrdan hech narsa yoʻq</string>
 </resources>

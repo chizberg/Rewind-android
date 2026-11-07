@@ -24,7 +24,6 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -289,14 +288,11 @@ class MapModelTest {
             )
         }
 
-    // MARK: - Previews (M8)
+    // MARK: - Region images
 
-    /**
-     * Under the limit, the strip lists one card per visible image with no "view as list" tail, and
-     * a server cluster contributes its preview image (flatten across annotation kinds).
-     */
+    /** A server cluster contributes its preview image to the region images (flatten across kinds). */
     @Test
-    fun previewsIncludeClusterPreviewUnderLimit() =
+    fun regionImagesIncludeClusterPreview() =
         reducerTest { scope ->
             val remote = FakeAnnotationsRemote()
             val model =
@@ -319,48 +315,14 @@ class MapModelTest {
                     .map { it.cid }
                     .toSet(),
             )
-            assertEquals(
-                4,
-                model.state.value.previews
-                    .count { it is PreviewCard.Image },
-            )
-            assertFalse(
-                model.state.value.previews
-                    .any { it is PreviewCard.ViewAsList },
-            )
-        }
-
-    /** Above the limit, the strip shows the first [PREVIEW_LIMIT] cards plus a "view as list" tail. */
-    @Test
-    fun previewsCapAtLimitWithViewAsListTail() =
-        reducerTest { scope ->
-            val remote = FakeAnnotationsRemote()
-            val model =
-                makeMapModel(
-                    remote.asRemote,
-                    onLoadFailed = {},
-                    scope = scope,
-                    now = { 0.0 },
-                    sorting = { ImageSorting.DateDescending },
-                )
-
-            remote.response = imagesNearCenter(11, zoom = 12) to emptyList()
-            model.loadRegion(12)
-            advanceUntilIdle()
-
-            val previews = model.state.value.previews
-            assertEquals(PREVIEW_LIMIT + 1, previews.size)
-            assertEquals(PREVIEW_LIMIT, previews.count { it is PreviewCard.Image })
-            assertEquals(PreviewCard.ViewAsList, previews.last())
-            assertEquals(11, model.state.value.currentRegionImages.size)
         }
 
     /**
-     * A server cluster whose preview shares a cid with a loose image adds no second card: region
-     * images and the strip dedupe by cid across annotation kinds.
+     * A server cluster whose preview shares a cid with a loose image adds no second entry: region
+     * images dedupe by cid across annotation kinds.
      */
     @Test
-    fun previewsDedupeClusterPreviewSharingCid() =
+    fun regionImagesDedupeClusterPreviewSharingCid() =
         reducerTest { scope ->
             val remote = FakeAnnotationsRemote()
             val model =
@@ -383,12 +345,40 @@ class MapModelTest {
                     .map { it.cid }
                     .toSet(),
             )
-            assertEquals(3, model.state.value.previews.size)
         }
 
-    /** An empty visible region shows the single "no images" card, not an empty strip. */
+    /** An empty reload (here: after a filter change clears the map) clears the stale region images. */
     @Test
-    fun emptyRegionShowsNoImagesCard() =
+    fun emptyLoadClearsRegionImages() =
+        reducerTest { scope ->
+            val remote = FakeAnnotationsRemote()
+            val model =
+                makeMapModel(remote.asRemote, onLoadFailed = {}, scope = scope, now = { 0.0 })
+
+            remote.response = imagesNearCenter(1, zoom = 12) to emptyList()
+            model.loadRegion(12)
+            advanceUntilIdle()
+            assertEquals(
+                listOf(1),
+                model.state.value.currentRegionImages
+                    .map { it.cid },
+            )
+
+            remote.response = emptyList<ModelImage>() to emptyList()
+            model(
+                MapAction.External.Ui.FiltersChanged(
+                    ImageRequestFilters(imageKind = ImageRequestFilters.ImageKind.Painting),
+                ),
+            )
+            advanceUntilIdle()
+            assertTrue(
+                model.state.value.currentRegionImages
+                    .isEmpty(),
+            )
+        }
+
+    @Test
+    fun emptyResultCountsOnlyLoadsThatEndEmpty() =
         reducerTest { scope ->
             val remote = FakeAnnotationsRemote()
             val model =
@@ -397,21 +387,26 @@ class MapModelTest {
             remote.response = emptyList<ModelImage>() to emptyList()
             model.loadRegion(12)
             advanceUntilIdle()
+            assertEquals(1, model.state.value.emptyResultCount)
 
-            assertEquals(listOf(PreviewCard.NoImages), model.state.value.previews)
-            assertTrue(
+            remote.response = imagesNearCenter(1, zoom = 12) to emptyList()
+            model.loadRegion(12, latOffset = 0.001)
+            advanceUntilIdle()
+            assertEquals(
+                listOf(1),
                 model.state.value.currentRegionImages
-                    .isEmpty(),
+                    .map { it.cid },
             )
+            assertEquals(1, model.state.value.emptyResultCount)
         }
 
     /**
-     * While a reload is in flight the strip must not recompute — even though the filter change
-     * cleared the annotations, `updatePreviews` is gated by `isLoading`, so the old strip survives
-     * until the load lands (without the gate the cleared region would flash "no images").
+     * While a reload is in flight the region images must not recompute — even though the filter
+     * change cleared the annotations, `updateRegionImages` is gated by `isLoading`, so the old images
+     * survive until the load lands (without the gate the cleared region would flash empty).
      */
     @Test
-    fun previewsGatedWhileLoadingKeepOldStrip() =
+    fun regionImagesGatedWhileLoadingKeepOldImages() =
         reducerTest { scope ->
             val remote = FakeAnnotationsRemote()
             val model =
@@ -426,7 +421,7 @@ class MapModelTest {
             remote.response = imagesNearCenter(3, zoom = 12) to emptyList()
             model.loadRegion(12)
             advanceUntilIdle()
-            assertEquals(3, model.state.value.previews.size)
+            assertEquals(3, model.state.value.currentRegionImages.size)
 
             // A filter change clears the annotations and starts a gated reload.
             remote.gateNextCall = true
@@ -438,16 +433,18 @@ class MapModelTest {
             )
             advanceUntilIdle()
             assertTrue(model.state.value.isLoading)
-            assertEquals(3, model.state.value.previews.size) // old strip kept despite cleared state
+            // kept despite cleared state
+            assertEquals(3, model.state.value.currentRegionImages.size)
 
             remote.openGate()
             advanceUntilIdle()
-            assertEquals(2, model.state.value.previews.size) // recomputed once the load lands
+            // recomputed once the load lands
+            assertEquals(2, model.state.value.currentRegionImages.size)
         }
 
-    /** The injected sorting orders the strip: descending puts the newest first, ascending the oldest. */
+    /** The injected sorting orders the region images: descending puts the newest first. */
     @Test
-    fun previewOrderFollowsInjectedSorting() =
+    fun regionImageOrderFollowsInjectedSorting() =
         reducerTest { scope ->
             val descRemote = FakeAnnotationsRemote()
             val descModel =
@@ -464,10 +461,9 @@ class MapModelTest {
             // cids 1..3 carry years 1900..1902, so the newest (cid 3) leads under descending order.
             assertEquals(
                 3,
-                descModel.state.value.previews
+                descModel.state.value.currentRegionImages
                     .first()
-                    .image
-                    ?.cid,
+                    .cid,
             )
 
             val ascRemote = FakeAnnotationsRemote()
@@ -484,10 +480,9 @@ class MapModelTest {
             advanceUntilIdle()
             assertEquals(
                 1,
-                ascModel.state.value.previews
+                ascModel.state.value.currentRegionImages
                     .first()
-                    .image
-                    ?.cid,
+                    .cid,
             )
         }
 
@@ -563,18 +558,12 @@ class MapModelTest {
         }
 
     /**
-     * A drag of the map that reaches the controls' band folds them away, and they unfold on their
-     * own after the 2s debounce; once the user has folded them by hand, a drag must neither refold
-     * them nor re-arm that unfold. Mirrors iOS
-     * `MapModelTests.dragMinimizesControlsAndAutoUnfoldsUnlessUserMinimized`
-     * (`MapModelTests.swift:216-233`).
-     *
-     * Shape differs from iOS in one place: there the band's height is the static
-     * `mapControlsTouchBlockingHeight`, here it is the strip's measured height, so the view has to
-     * report it before any drag means anything (see `MapState.ControlsState.heightDp`).
+     * A drag near the bottom edge minimizes the sheet and it unfolds back after the 2s debounce;
+     * once minimized by the user, a drag must not re-arm the auto-unfold. Mirrors iOS
+     * `MapModelTests.dragMinimizesSheetAndAutoUnfoldsUnlessUserMinimized`.
      */
     @Test
-    fun dragMinimizesControlsAndAutoUnfoldsUnlessUserMinimized() =
+    fun dragMinimizesSheetAndAutoUnfoldsUnlessUserMinimized() =
         reducerTest { scope ->
             val model =
                 makeMapModel(
@@ -586,27 +575,23 @@ class MapModelTest {
             assertEquals(Minimization.Normal, model.state.value.controls.minimization)
 
             val viewportHeight = 800f
-            val stripHeight = 230f
-            model(
-                MapAction.External.Ui.Controls
-                    .SizeChanged(stripHeight),
-            )
-
-            val insideBand = viewportHeight - stripHeight + 1f
-            model(MapAction.External.Map.UserDragged(insideBand, viewportHeight))
+            val bottomTouch = viewportHeight - SHEET_NORMAL_HEIGHT + 1f
+            model(MapAction.External.Map.UserDragged(bottomTouch, viewportHeight))
             assertEquals(
                 Minimization.Minimized(byUser = false),
                 model.state.value.controls.minimization,
             )
+            assertEquals(SheetDetent.Minimized, model.state.value.sheetDetent)
 
             advanceTimeBy(2500.milliseconds)
             assertEquals(Minimization.Normal, model.state.value.controls.minimization)
+            assertEquals(SheetDetent.Normal, model.state.value.sheetDetent)
 
             model(
-                MapAction.External.Ui.Controls
-                    .SetMinimization(Minimization.Minimized(byUser = true)),
+                MapAction.External.Ui.Sheet
+                    .SetDetent(SheetDetent.Minimized),
             )
-            model(MapAction.External.Map.UserDragged(insideBand, viewportHeight))
+            model(MapAction.External.Map.UserDragged(bottomTouch, viewportHeight))
             advanceTimeBy(2300.milliseconds)
             assertEquals(
                 Minimization.Minimized(byUser = true),
@@ -640,7 +625,7 @@ private fun region(
 /** A visible longitude span for a zoom (halves per zoom step); mirrors LocalClusteringTest. */
 private fun spanForZoom(zoom: Int): Double = 360.0 / 2.0.pow(zoom)
 
-/** Dispatches a region change at [zoom] (the previews tests all operate at a single zoom). */
+/** Dispatches a region change at [zoom] (the region-image tests all operate at a single zoom). */
 private fun Reducer<MapState, MapAction>.loadRegion(
     zoom: Int,
     latOffset: Double = 0.0,
@@ -683,7 +668,7 @@ private fun img(
 /**
  * [count] loose images in distinct cells within ±2 of the region center at [zoom] — each cell holds
  * one image (below the local-cluster threshold) and every cell sits inside the visible region, so
- * all of them show up in the preview strip. Years increase with the index, so the newest is last.
+ * all of them show up in the region images. Years increase with the index, so the newest is last.
  */
 private fun imagesNearCenter(
     count: Int,

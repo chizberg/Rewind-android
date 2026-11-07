@@ -17,10 +17,7 @@
     <string name="action_save_image">Bild speichern</string>
     <string name="action_view_on_web">Im Web ansehen</string>
     <string name="action_find_route">Route finden</string>
-    <string name="preview_no_images">Hier ist noch nichts</string>
-    <string name="preview_view_as_list">Als Liste anzeigen</string>
     <string name="list_favorites">Favoriten</string>
-    <string name="list_on_the_map">Auf der Karte</string>
     <string name="cluster">Bildergruppe</string>
     <string name="list_empty">Hier ist noch nichts</string>
     <string name="image_kind_photos">Fotos</string>
@@ -127,4 +124,14 @@
     <string name="colorization_only_tint">Es sieht aus, als wäre das Bild nicht farbiger geworden. Modelle machen Fehler, du kannst ein anderes ausprobieren.</string>
     <string name="onboarding_colorization_title">Bilder kolorieren</string>
     <string name="onboarding_colorization_description">Bring Farbe in Schwarz-Weiß-Fotos – direkt auf deinem Gerät. Kostenlos, kein Konto nötig.</string>
+    <string name="hint_widen_years">Versuche, den Zeitraum zu erweitern</string>
+    <string name="hint_switch_to_photos">Versuche, zu Fotos zu wechseln</string>
+    <string name="hint_move_or_zoom_out">Versuche, die Karte zu verschieben oder herauszuzoomen</string>
+    <string name="placeholder_nothing_in_sight">Nichts in Sicht</string>
+    <string name="placeholder_all_quiet">Hier ist es ruhig</string>
+    <string name="placeholder_empty_for_now">Vorerst leer</string>
+    <string name="placeholder_nothing_found">Noch nichts gefunden</string>
+    <string name="placeholder_no_traces">Noch keine Spuren</string>
+    <string name="placeholder_nothing_to_show">Noch nichts zu zeigen</string>
+    <string name="placeholder_nothing_from_this_time">Nichts aus dieser Zeit</string>
 </resources>
