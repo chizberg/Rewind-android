@@ -101,34 +101,47 @@ fun makeMapModel(
             // state change is the whole branch.
             is MapAction.External.Ui.MapTypeSelected -> state.copy(mapType = action.mapType)
 
-            is MapAction.External.Ui.Controls.SetExpandedItems ->
-                state.copy(controls = state.controls.copy(expandedItems = action.items))
+            is MapAction.External.Ui.Controls.SetTimePickerVisible ->
+                state.copy(controls = state.controls.copy(isTimePickerVisible = action.isVisible))
 
-            is MapAction.External.Ui.Controls.SetMinimization ->
-                state.copy(controls = state.controls.copy(minimization = action.minimization))
+            is MapAction.External.Ui.Sheet.StateChanged -> {
+                val leavesFullscreen = action.detent != SheetDetent.Fullscreen
+                val deferred = state.deferredRegion.takeIf { leavesFullscreen }
+                deferred?.let { asyncEffect(AsyncEffect.anotherAction(action = it)) }
+                val minimization =
+                    if (state.sheetDetent != action.detent) {
+                        minimization(action.detent)
+                    } else {
+                        state.controls.minimization
+                    }
+                state.copy(
+                    deferredRegion = if (deferred != null) null else state.deferredRegion,
+                    sheetDetent = action.detent,
+                    controls = state.controls.copy(minimization = minimization),
+                    bottomInset = minOf(action.visibleHeight, SHEET_NORMAL_HEIGHT),
+                    toolbarKind =
+                        if (action.showsSheetToolbar) ToolbarKind.Sheet else ToolbarKind.Map,
+                )
+            }
 
-            is MapAction.External.Ui.Controls.SizeChanged ->
-                state.copy(controls = state.controls.copy(heightDp = action.heightDp))
+            is MapAction.External.Ui.Sheet.SetDetent ->
+                state.copy(
+                    controls = state.controls.copy(minimization = minimization(action.detent)),
+                    sheetDetent = action.detent,
+                )
 
-            // A pan of the map that reaches the band the controls occupy folds them away, so the
-            // finger is not dragging the map through an opaque strip; they come back on their own
-            // 2s after the gesture leaves. Every movement inside the band re-arms that debounce
-            // (iOS's `handlePan` fires on each callback too), so the countdown starts from the last
-            // moment the finger was down there.
             is MapAction.External.Map.UserDragged ->
                 when {
-                    // Folded by hand, so leave it folded: cancel any pending unfold rather than
-                    // undoing what the user just did (iOS's guard, same order).
                     state.controls.minimization.isMinimizedByUser -> {
-                        asyncEffect(AsyncEffect.cancel(DebouncedActionId.UnfoldControlsBack))
+                        asyncEffect(AsyncEffect.cancel(DebouncedActionId.UnfoldSheetBack))
                         state
                     }
 
-                    action.touchY > action.viewportHeight - state.controls.heightDp -> {
+                    action.touchY > action.viewportHeight - SHEET_NORMAL_HEIGHT -> {
                         asyncEffect(
                             AsyncEffect.debounced(
-                                id = DebouncedActionId.UnfoldControlsBack,
-                                anotherAction = MapAction.Internal.UnfoldMapControlsBack,
+                                id = DebouncedActionId.UnfoldSheetBack,
+                                anotherAction = MapAction.Internal.UnfoldSheetBack,
                             ),
                         )
                         state.copy(
@@ -136,6 +149,7 @@ fun makeMapModel(
                                 state.controls.copy(
                                     minimization = Minimization.Minimized(byUser = false),
                                 ),
+                            sheetDetent = SheetDetent.Minimized,
                         )
                     }
 
@@ -200,21 +214,12 @@ fun makeMapModel(
                 )
             }
 
-            is MapAction.Internal.RegionChanged -> {
-                asyncEffect(AsyncEffect.anotherAction(action = MapAction.Internal.LoadAnnotations))
-                asyncEffect(
-                    AsyncEffect.debounced(
-                        id = DebouncedActionId.UpdatePreviews,
-                        anotherAction = MapAction.Internal.UpdatePreviews,
-                    ),
-                )
-                state
-                    .copy(
-                        region = action.region,
-                        zoom = action.zoom,
-                        cameraZoom = action.cameraZoom,
-                    ).evictingFarAnnotations()
-            }
+            is MapAction.Internal.RegionChanged ->
+                if (state.sheetDetent == SheetDetent.Fullscreen) {
+                    state.copy(deferredRegion = action)
+                } else {
+                    applyRegion(state, action, asyncEffect)
+                }
 
             MapAction.Internal.LoadAnnotations -> {
                 val params =
@@ -242,7 +247,11 @@ fun makeMapModel(
             is MapAction.Internal.Loaded -> {
                 val diff =
                     makeDiffAfterReceived(action.images, action.clusters, action.params, state)
-                asyncEffect(AsyncEffect.anotherAction(action = MapAction.Internal.UpdatePreviews))
+                asyncEffect(
+                    AsyncEffect.anotherAction(
+                        action = MapAction.Internal.UpdateRegionImages(afterLoad = true),
+                    ),
+                )
                 diff.state.copy(isLoading = false, lastLoadedParams = action.params)
             }
 
@@ -251,32 +260,67 @@ fun makeMapModel(
                 state.copy(isLoading = false)
             }
 
-            MapAction.Internal.UpdatePreviews -> {
-                // Skip entirely while a load is in flight, so previews never flash a half-loaded
+            is MapAction.Internal.UpdateRegionImages -> {
+                // Skip entirely while a load is in flight, so the sheet never flashes a half-loaded
                 // region (iOS `guard !state.isLoading`); the load's `.Loaded` re-dispatches this.
                 if (state.isLoading) {
                     state
                 } else {
                     val images = regionImages(state.annotations, state.region, sorting())
-                    state.copy(currentRegionImages = images, previews = makePreviews(images))
+                    val endedEmpty = action.afterLoad && images.isEmpty()
+                    state.copy(
+                        currentRegionImages = images,
+                        emptyResultCount = state.emptyResultCount + if (endedEmpty) 1 else 0,
+                    )
                 }
             }
 
-            MapAction.Internal.UnfoldMapControlsBack ->
-                state.copy(controls = state.controls.copy(minimization = Minimization.Normal))
+            MapAction.Internal.UnfoldSheetBack ->
+                if (state.controls.minimization == Minimization.Minimized(byUser = false)) {
+                    state.copy(
+                        controls = state.controls.copy(minimization = Minimization.Normal),
+                        sheetDetent = SheetDetent.Normal,
+                    )
+                } else {
+                    state
+                }
 
             MapAction.Internal.ClearAnnotations -> {
-                // Debounced with the same id as regionChanged's updatePreviews, so a clear followed
-                // quickly by a region change coalesces into one preview pass (mirrors iOS).
+                // Debounced with the same id as regionChanged's updateRegionImages, so a clear
+                // followed quickly by a region change coalesces into one pass (mirrors iOS).
                 asyncEffect(
                     AsyncEffect.debounced(
-                        id = DebouncedActionId.UpdatePreviews,
-                        anotherAction = MapAction.Internal.UpdatePreviews,
+                        id = DebouncedActionId.UpdateRegionImages,
+                        anotherAction = MapAction.Internal.UpdateRegionImages(afterLoad = false),
                     ),
                 )
                 state.copy(clusters = emptySet(), clusteredImages = emptyMap())
             }
         }
+    }
+
+private fun applyRegion(
+    state: MapState,
+    action: MapAction.Internal.RegionChanged,
+    asyncEffect: (AsyncEffect<MapAction>) -> Unit,
+): MapState {
+    asyncEffect(AsyncEffect.anotherAction(action = MapAction.Internal.LoadAnnotations))
+    asyncEffect(
+        AsyncEffect.debounced(
+            id = DebouncedActionId.UpdateRegionImages,
+            anotherAction = MapAction.Internal.UpdateRegionImages(afterLoad = false),
+        ),
+    )
+    return state
+        .copy(region = action.region, zoom = action.zoom, cameraZoom = action.cameraZoom)
+        .evictingFarAnnotations()
+}
+
+private fun minimization(userSetDetent: SheetDetent): Minimization =
+    if (userSetDetent == SheetDetent.Minimized) {
+        Minimization.Minimized(byUser = true)
+    } else {
+        Minimization.Normal
     }
 
 /**

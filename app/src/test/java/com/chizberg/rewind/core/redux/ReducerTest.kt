@@ -464,9 +464,9 @@ class ReducerDebounceTest {
     @Test
     fun debouncedActionIdDelays() {
         assertEquals(100.milliseconds, DebouncedActionId.RegionChanged.delay)
-        assertEquals(100.milliseconds, DebouncedActionId.UpdatePreviews.delay)
+        assertEquals(100.milliseconds, DebouncedActionId.UpdateRegionImages.delay)
         assertEquals(100.milliseconds, DebouncedActionId.FiltersChanged.delay)
-        assertEquals(2.seconds, DebouncedActionId.UnfoldControlsBack.delay)
+        assertEquals(2.seconds, DebouncedActionId.UnfoldSheetBack.delay)
     }
 }
 

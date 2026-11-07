@@ -1,21 +1,13 @@
 package com.chizberg.rewind.features.imagelist.ui
 
 import androidx.annotation.StringRes
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.ArrowDownward
@@ -39,15 +31,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -60,31 +47,15 @@ import com.chizberg.rewind.features.details.ui.ImageDetailsView
 import com.chizberg.rewind.features.imagelist.ImageListAction
 import com.chizberg.rewind.features.imagelist.ImageListModel
 import com.chizberg.rewind.features.imagelist.ImageListState
-import com.chizberg.rewind.features.map.ui.RewindAsyncImage
-import com.chizberg.rewind.ui.ImageDateBadge
+import com.chizberg.rewind.features.map.SHEET_NORMAL_HEIGHT
 import com.chizberg.rewind.ui.Overlay
 
-/** iOS `LazyVGrid(.adaptive(minimum: 300))`. */
-private val GridMinCell = 300.dp
-
-/** iOS `LazyVGrid` spacing 10 (both axes) and its fixed `.padding(.horizontal, 16)`. */
-private val GridSpacing = 10.dp
-private val GridInset = 16.dp
-
-/** iOS `ImageListCell` corner radius (20) and its `.padding(radius)` text inset. */
-private val CellCorner = 20.dp
-private val CellPadding = 20.dp
-private const val CELL_ASPECT = 4f / 3f
-
-/** iOS `ImageListCell` scrim: clear → black 0.5, top-to-bottom. */
-private const val SCRIM_ALPHA = 0.5f
-
 /**
- * The image-grid screen. Port of iOS `ImageList` + `ImageListCell`. Renders one [ImageListModel]:
+ * The image-grid screen. Port of iOS `ImageList`. Renders one [ImageListModel]:
  * a large collapsing title, an optional sort menu (hidden when `sorting == null`, i.e. Favorites),
- * an adaptive grid of 4:3 cells, and — as a nested layer — the details screen a cell tap opens
+ * the staggered grid of vertical cards, and — as a nested layer — the details screen a cell tap opens
  * (its own overlay, so back closes it before the list; iOS `ImageListModel.imageDetails`). An empty
- * list shows the 💔 placeholder.
+ * list shows a random placeholder.
  *
  * Divergences from the iOS view: no shared-element zoom transition (details open through the plain
  * [Overlay], as everywhere in this port); the iOS Android-idiomatic long-press-to-unfavorite
@@ -143,7 +114,7 @@ private fun ListScaffold(
     modifier: Modifier = Modifier,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-    val gridState = rememberLazyGridState()
+    val gridState = rememberLazyStaggeredGridState()
 
     // iOS `.onChange(of: sorting) { scrollPosition.scrollTo(.top) }`: a re-sort jumps back up.
     LaunchedEffect(state.sorting) { gridState.animateScrollToItem(0) }
@@ -188,104 +159,24 @@ private fun ListScaffold(
         },
     ) { padding ->
         if (state.images.isEmpty()) {
-            EmptyState(Modifier.fillMaxSize().padding(padding))
-        } else {
-            // The grid runs edge-to-edge and applies the Scaffold insets once, through
-            // contentPadding (top app-bar height + bottom nav-bar), so it scrolls under a
-            // transparent nav bar instead of being clipped above it. Horizontal inset is fixed at
-            // 16dp (iOS parity), not a system inset.
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(GridMinCell),
-                state = gridState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding =
-                    PaddingValues(
-                        start = GridInset,
-                        end = GridInset,
-                        top = padding.calculateTopPadding() + GridSpacing,
-                        bottom = padding.calculateBottomPadding() + GridSpacing,
-                    ),
-                horizontalArrangement = Arrangement.spacedBy(GridSpacing),
-                verticalArrangement = Arrangement.spacedBy(GridSpacing),
-            ) {
-                items(state.images, key = { it.cid }) { image ->
-                    ImageListCell(
-                        image = image,
-                        scheme = scheme,
-                        maxRange = maxRange,
-                        onClick = { onImageClick(image) },
-                        modifier = Modifier.animateItem(),
-                    )
-                }
-            }
-        }
-    }
-}
-
-/**
- * One grid cell. Port of iOS `ImageListCell`: a 4:3 thumbnail with a bottom scrim, a white
- * two-line title, and the year-tinted date badge. The chrome (title, scrim) is plain white/black —
- * only the date badge is year-tinted (as on iOS, via `ImageDateView`), unlike the strip card.
- */
-@Composable
-private fun ImageListCell(
-    image: ModelImage,
-    scheme: GradientScheme,
-    maxRange: IntRange,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Box(
-        modifier
-            .aspectRatio(CELL_ASPECT)
-            .clip(RoundedCornerShape(CellCorner))
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.BottomStart,
-    ) {
-        RewindAsyncImage(
-            path = image.imagePath,
-            contentDescription = image.title,
-            modifier = Modifier.fillMaxSize(),
-        )
-        Column(
-            modifier =
+            EmptyList(
                 Modifier
                     .fillMaxWidth()
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(Color.Transparent, Color.Black.copy(alpha = SCRIM_ALPHA)),
-                        ),
-                    ).padding(CellPadding),
-            verticalArrangement = Arrangement.spacedBy(5.dp),
-        ) {
-            Text(
-                text = image.title,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                color = Color.White,
-                style = MaterialTheme.typography.titleLarge,
-                // iOS 4b0a0fb: the photo's title reads as a caption in an album.
-                fontFamily = FontFamily.Serif,
-                fontWeight = FontWeight.Bold,
+                    .padding(padding)
+                    .height(SHEET_NORMAL_HEIGHT.dp)
+                    .wrapContentSize(),
             )
-            ImageDateBadge(date = image.date, scheme = scheme, maxRange = maxRange)
-        }
-    }
-}
-
-/** iOS empty state: 💔 over "Nothing here yet". */
-@Composable
-private fun EmptyState(modifier: Modifier = Modifier) {
-    Box(modifier, contentAlignment = Alignment.Center) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text("💔", style = MaterialTheme.typography.displaySmall)
-            Text(
-                text = stringResource(R.string.list_empty),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+        } else {
+            val cardBackground = MaterialTheme.colorScheme.surfaceContainerHigh
+            ImageGrid(
+                images = state.images,
+                scheme = scheme,
+                maxRange = maxRange,
+                onImageClick = onImageClick,
+                cardBackground = { cardBackground },
+                state = gridState,
+                contentPadding = padding,
+                modifier = Modifier.fillMaxSize(),
             )
         }
     }
@@ -297,7 +188,7 @@ private fun EmptyState(modifier: Modifier = Modifier) {
  * check-marked.
  */
 @Composable
-private fun SortMenu(
+internal fun SortMenu(
     current: ImageSorting,
     onSelect: (ImageSorting) -> Unit,
 ) {

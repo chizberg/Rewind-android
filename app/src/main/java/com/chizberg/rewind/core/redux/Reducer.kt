@@ -122,11 +122,10 @@ enum class DebouncedActionId(
     val delay: Duration,
 ) {
     RegionChanged(100.milliseconds),
-    UpdatePreviews(100.milliseconds),
+    UpdateRegionImages(100.milliseconds),
     FiltersChanged(100.milliseconds),
 
-    /** How long the auto-minimized map controls stay folded once the finger stops re-arming it. */
-    UnfoldControlsBack(2.seconds),
+    UnfoldSheetBack(2.seconds),
 
     /**
      * Android-only: the place-autocomplete fetch behind the search field. iOS has no delay to port

@@ -17,10 +17,7 @@
     <string name="action_save_image">Зберегти зображення</string>
     <string name="action_view_on_web">На сайті</string>
     <string name="action_find_route">Знайти маршрут</string>
-    <string name="preview_no_images">Тут поки нічого немає</string>
-    <string name="preview_view_as_list">Переглянути списком</string>
     <string name="list_favorites">Улюблене</string>
-    <string name="list_on_the_map">На карті</string>
     <string name="cluster">Група зображень</string>
     <string name="list_empty">Тут поки нічого немає</string>
     <string name="image_kind_photos">Фото</string>
@@ -127,4 +124,14 @@
     <string name="colorization_only_tint">Виглядає так, ніби зображення не стало насиченішим. Моделі можуть помилятися, ви можете спробувати іншу.</string>
     <string name="onboarding_colorization_title">Розфарбовування фото</string>
     <string name="onboarding_colorization_description">Додайте колір чорно-білим фотографіям просто на пристрої. Безкоштовно, акаунт не потрібен.</string>
+    <string name="hint_widen_years">Спробуйте розширити діапазон років</string>
+    <string name="hint_switch_to_photos">Спробуйте перемкнутися на фото</string>
+    <string name="hint_move_or_zoom_out">Спробуйте зсунути або віддалити карту</string>
+    <string name="placeholder_nothing_in_sight">Нічого не видно</string>
+    <string name="placeholder_all_quiet">Тут тихо</string>
+    <string name="placeholder_empty_for_now">Поки порожньо</string>
+    <string name="placeholder_nothing_found">Поки нічого не знайдено</string>
+    <string name="placeholder_no_traces">Слідів поки немає</string>
+    <string name="placeholder_nothing_to_show">Поки що нема чого показати</string>
+    <string name="placeholder_nothing_from_this_time">З цього часу нічого немає</string>
 </resources>

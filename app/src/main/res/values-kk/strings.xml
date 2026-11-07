@@ -17,10 +17,7 @@
     <string name="action_save_image">Суретті сақтау</string>
     <string name="action_view_on_web">Вебте қарау</string>
     <string name="action_find_route">Бағыт табу</string>
-    <string name="preview_no_images">Әзірше бұл жерде ештеңе жоқ</string>
-    <string name="preview_view_as_list">Тізім түрінде көру</string>
     <string name="list_favorites">Таңдаулылар</string>
-    <string name="list_on_the_map">Картада</string>
     <string name="cluster">Суреттер тобы</string>
     <string name="list_empty">Әзірше бұл жерде ештеңе жоқ</string>
     <string name="image_kind_photos">Фотосуреттер</string>
@@ -127,4 +124,14 @@
     <string name="colorization_only_tint">Сурет бұрынғыдан қанық бола қойған жоқ сияқты. Модельдер қателесуі мүмкін, басқасын байқап көріңіз.</string>
     <string name="onboarding_colorization_title">Суреттерді бояу</string>
     <string name="onboarding_colorization_description">Ақ-қара суреттерге құрылғыңызда түс қосыңыз. Тегін, тіркелудің қажеті жоқ.</string>
+    <string name="hint_widen_years">Жылдар аралығын кеңейтіп көріңіз</string>
+    <string name="hint_switch_to_photos">Фотосуреттерге ауысып көріңіз</string>
+    <string name="hint_move_or_zoom_out">Картаны жылжытып немесе кішірейтіп көріңіз</string>
+    <string name="placeholder_nothing_in_sight">Ештеңе көрінбейді</string>
+    <string name="placeholder_all_quiet">Мұнда тыныш</string>
+    <string name="placeholder_empty_for_now">Әзірше бос</string>
+    <string name="placeholder_nothing_found">Әзірше ештеңе табылмады</string>
+    <string name="placeholder_no_traces">Әзірше із жоқ</string>
+    <string name="placeholder_nothing_to_show">Әзірше көрсететін ештеңе жоқ</string>
+    <string name="placeholder_nothing_from_this_time">Бұл кезеңнен ештеңе жоқ</string>
 </resources>

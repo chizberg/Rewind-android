@@ -17,10 +17,7 @@
     <string name="action_save_image">Сохранить</string>
     <string name="action_view_on_web">На сайте</string>
     <string name="action_find_route">Маршрут</string>
-    <string name="preview_no_images">Тут пока ничего нет</string>
-    <string name="preview_view_as_list">Открыть списком</string>
     <string name="list_favorites">Избранное</string>
-    <string name="list_on_the_map">На карте</string>
     <string name="cluster">Кластер</string>
     <string name="list_empty">Тут пока ничего нет</string>
     <string name="image_kind_photos">Фото</string>
@@ -127,4 +124,14 @@
     <string name="colorization_only_tint">Выглядит, как будто картинка не стала насыщеннее. Модели могут совершать ошибки, можете попробовать другую.</string>
     <string name="onboarding_colorization_title">Раскраска картинок</string>
     <string name="onboarding_colorization_description">Добавьте цвет чёрно-белым фотографиям прямо на устройстве. Бесплатно, аккаунт не нужен.</string>
+    <string name="hint_widen_years">Попробуйте расширить диапазон лет</string>
+    <string name="hint_switch_to_photos">Попробуйте переключиться на фото</string>
+    <string name="hint_move_or_zoom_out">Попробуйте сдвинуть или отдалить карту</string>
+    <string name="placeholder_nothing_in_sight">Ничего не видно</string>
+    <string name="placeholder_all_quiet">Здесь тихо</string>
+    <string name="placeholder_empty_for_now">Пока пусто</string>
+    <string name="placeholder_nothing_found">Пока ничего не нашлось</string>
+    <string name="placeholder_no_traces">Следов пока нет</string>
+    <string name="placeholder_nothing_to_show">Пока нечего показать</string>
+    <string name="placeholder_nothing_from_this_time">Из этого времени ничего нет</string>
 </resources>

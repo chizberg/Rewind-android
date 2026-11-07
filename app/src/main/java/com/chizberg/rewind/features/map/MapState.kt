@@ -10,23 +10,11 @@ import com.chizberg.rewind.domain.Span
 import com.chizberg.rewind.network.AnnotationLoadingParams
 
 /**
- * A control in the map's floating menu that can be expanded in place. Port of iOS
- * `FloatingMenu.Item`, trimmed to the expandable ones: iOS marks only the time picker `.expandable`
- * (map type / image kind / search / location are `.fixed`), so only it needs identity in state.
- */
-enum class MapControlItem {
-    TimePicker,
-}
-
-/**
- * How far the floating controls are out of the way. Port of iOS `MinimizationState` (which lives in
- * `MapControlsHiding.swift`, next to the gesture that writes it; here the state is JVM-only, so it
- * sits with the rest of the map's state and the gesture stays in `RewindMap`).
+ * Whether the region sheet is minimized and by whom. Port of iOS `MinimizationState`.
  *
- * [Minimized.byUser] is what keeps the two drivers from fighting: a drag of the *map* into the
- * controls' band minimizes them automatically and re-arms a 2s unfold, but once the user has
- * minimized them *themselves* (by dragging the strip down) the automatic driver stops touching
- * them — they stay put until dragged or tapped back.
+ * [Minimized.byUser] keeps the two drivers from fighting: a drag of the *map* near the bottom edge
+ * minimizes the sheet and re-arms a 2s unfold, but once the user has minimized it *themselves* the
+ * automatic driver stops touching it.
  */
 sealed interface Minimization {
     data object Normal : Minimization
@@ -34,8 +22,6 @@ sealed interface Minimization {
     data class Minimized(
         val byUser: Boolean = false,
     ) : Minimization
-
-    val isMinimized: Boolean get() = this is Minimized
 
     val isMinimizedByUser: Boolean get() = this is Minimized && byUser
 }
@@ -62,11 +48,7 @@ data class MapState(
     // The base map's style (iOS `MapState.mapType`). Transient, never persisted: it starts at
     // `Scheme` on every launch, exactly as iOS's `makeInitial` does.
     val mapType: MapType = MapType.Scheme,
-    // Deduped, sorted images visible in the current region — the source for both the preview strip
-    // and the "view as list" screen (iOS `currentRegionImages`). Recomputed on `updatePreviews`.
     val currentRegionImages: List<ModelImage> = emptyList(),
-    // The bottom preview strip's cards, derived from [currentRegionImages] (iOS `previews`).
-    val previews: List<PreviewCard> = emptyList(),
     // The local-clustering grid cell's longitude span, held fixed for the whole rounded-zoom bucket
     // (LocalClustering recomputes it only when the bucket changes). 0.0 until the first load.
     val clusteringCellSpan: Double = 0.0,
@@ -76,23 +58,15 @@ data class MapState(
     // location reducer via `NewLocationState`. iOS seeds it through `makeInitial(locationState:)`;
     // here the stream's first (replayed) value does the same job — see AppGraph.
     val locationState: LocationState = LocationState(),
+    val deferredRegion: MapAction.Internal.RegionChanged? = null,
+    val emptyResultCount: Int = 0,
+    val sheetDetent: SheetDetent = SheetDetent.Normal,
+    val bottomInset: Float = SHEET_NORMAL_HEIGHT,
+    val toolbarKind: ToolbarKind = ToolbarKind.Map,
 ) {
-    /**
-     * The floating controls' view state. Port of iOS `MapState.ControlsState`.
-     *
-     * [heightDp] is iOS's `size`, narrowed to the one dimension anything reads (iOS passes the whole
-     * `CGSize` but only ever uses `height`). It is the strip's measured height in dp, reported by
-     * the view, and it stands in for iOS's static `mapControlsTouchBlockingHeight`: our strip's
-     * height is not a constant — it carries the navigation-bar inset and grows when the year
-     * selector expands — so the band the controls occupy has to be measured rather than declared.
-     *
-     * The pull-up-to-open-the-list driver of `minimization` is not ported: that job is done by the
-     * strip's trailing "view as list" card, which iOS shows as well.
-     */
     data class ControlsState(
-        val expandedItems: Set<MapControlItem> = emptySet(),
+        val isTimePickerVisible: Boolean = false,
         val minimization: Minimization = Minimization.Normal,
-        val heightDp: Float = 0f,
     )
 
     /**

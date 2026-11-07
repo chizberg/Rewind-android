@@ -18,10 +18,7 @@
     <string name="action_save_image">Save image</string>
     <string name="action_view_on_web">View on Web</string>
     <string name="action_find_route">Find route</string>
-    <string name="preview_no_images">Nothing here yet</string>
-    <string name="preview_view_as_list">View as List</string>
     <string name="list_favorites">Favorites</string>
-    <string name="list_on_the_map">On the map</string>
     <string name="cluster">Cluster</string>
     <string name="list_empty">Nothing here yet</string>
     <string name="image_kind_photos">Photos</string>
@@ -130,4 +127,14 @@
     <string name="colorization_only_tint">It looks like the picture didn\'t get any more colorful. Models make mistakes, you can try another one.</string>
     <string name="onboarding_colorization_title">Image colorization</string>
     <string name="onboarding_colorization_description">Add color to black-and-white photos right on your device. Free, no account needed.</string>
+    <string name="hint_widen_years">Try widening the years</string>
+    <string name="hint_switch_to_photos">Try switching to photos</string>
+    <string name="hint_move_or_zoom_out">Try moving the map or zooming out</string>
+    <string name="placeholder_nothing_in_sight">Nothing in sight</string>
+    <string name="placeholder_all_quiet">All quiet here</string>
+    <string name="placeholder_empty_for_now">Empty for now</string>
+    <string name="placeholder_nothing_found">Nothing found yet</string>
+    <string name="placeholder_no_traces">No traces yet</string>
+    <string name="placeholder_nothing_to_show">Nothing to show yet</string>
+    <string name="placeholder_nothing_from_this_time">Nothing from this time</string>
 </resources>

@@ -14,7 +14,6 @@ import com.chizberg.rewind.features.imagelist.ui.ImageListView
 import com.chizberg.rewind.features.map.AnnotationValue
 import com.chizberg.rewind.features.map.LocationAction
 import com.chizberg.rewind.features.map.MapAction
-import com.chizberg.rewind.features.map.PreviewCard
 import com.chizberg.rewind.features.map.ui.LocalRewindImageLoader
 import com.chizberg.rewind.features.map.ui.RewindMap
 import com.chizberg.rewind.features.onboarding.ui.OnboardingView
@@ -25,7 +24,7 @@ import com.chizberg.rewind.ui.OverlayHost
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
-/** iOS `RootView.TransitionSource.thumbnail`: opening details from a preview card or a pin. */
+/** iOS `RootView.TransitionSource.thumbnail`: opening details from a sheet card or a pin. */
 private const val THUMBNAIL_SOURCE = "thumbnail"
 
 /**
@@ -69,6 +68,10 @@ fun RootView(modifier: Modifier = Modifier) {
                 .distinctUntilChanged()
         }.collectAsStateWithLifecycle(initialValue = initialMaxRange)
 
+    val sorting by graph.sortingChanges.collectAsStateWithLifecycle(
+        initialValue = graph.imageSorting.value,
+    )
+
     // The system permission dialog can only be launched from composition, so the map's
     // `requestAccess` lands here and the verdict goes back into the location reducer.
     LocationPermissionHost(
@@ -102,7 +105,11 @@ fun RootView(modifier: Modifier = Modifier) {
                     scheme = appState.gradientScheme,
                     focusRequests = graph.focusRequests,
                     openClusterPreviews = graph.openClusterPreviews,
-                    onCardClick = { card -> presentCard(card) { graph.appModel(it) } },
+                    sorting = sorting,
+                    onSortingChange = { graph.imageSorting.value = it },
+                    onImageClick = {
+                        graph.appModel(AppAction.ImageDetails.Present(it, THUMBNAIL_SOURCE))
+                    },
                     onAnnotationClick = { annotation ->
                         presentAnnotation(annotation) { graph.appModel(it) }
                     },
@@ -112,9 +119,6 @@ fun RootView(modifier: Modifier = Modifier) {
                         )
                     },
                     onFavoritesClick = { graph.appModel(AppAction.ImageList.PresentFavorites) },
-                    onViewAsListClick = {
-                        graph.appModel(AppAction.ImageList.PresentCurrentRegionImages)
-                    },
                     onSearchClick = { graph.appModel(AppAction.Search.Present) },
                     onSettingsClick = { graph.appModel(AppAction.Settings.Present) },
                     // Port of iOS's `.task { if appStore.onboardingStore == nil { … } }`: while the
@@ -201,22 +205,6 @@ fun RootView(modifier: Modifier = Modifier) {
         appState.alert?.let { params ->
             RewindAlert(params = params, onDismiss = { graph.appModel(AppAction.Alert.Dismiss) })
         }
-    }
-}
-
-/**
- * Routes a tapped preview card: an image opens its details; the trailing "view as list" card opens
- * the current-region list; the "no images" placeholder does nothing.
- */
-private fun presentCard(
-    card: PreviewCard,
-    dispatch: (AppAction) -> Unit,
-) {
-    when (card) {
-        is PreviewCard.Image ->
-            dispatch(AppAction.ImageDetails.Present(card.value, THUMBNAIL_SOURCE))
-        PreviewCard.ViewAsList -> dispatch(AppAction.ImageList.PresentCurrentRegionImages)
-        PreviewCard.NoImages -> Unit
     }
 }
 

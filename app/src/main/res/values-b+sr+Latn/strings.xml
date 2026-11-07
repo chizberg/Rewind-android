@@ -17,10 +17,7 @@
     <string name="action_save_image">Sačuvaj sliku</string>
     <string name="action_view_on_web">Otvori na vebu</string>
     <string name="action_find_route">Pronađi rutu</string>
-    <string name="preview_no_images">Ovde još nema ničega</string>
-    <string name="preview_view_as_list">Prikaži kao listu</string>
     <string name="list_favorites">Omiljeno</string>
-    <string name="list_on_the_map">Na karti</string>
     <string name="cluster">Grupa slika</string>
     <string name="list_empty">Ovde još nema ničega</string>
     <string name="image_kind_photos">Fotografije</string>
@@ -127,4 +124,14 @@
     <string name="colorization_only_tint">Izgleda da slika nije postala bogatija bojama. Modeli greše, možete probati drugi.</string>
     <string name="onboarding_colorization_title">Bojenje fotografija</string>
     <string name="onboarding_colorization_description">Dodajte boju crno-belim fotografijama direktno na uređaju. Besplatno, bez naloga.</string>
+    <string name="hint_widen_years">Pokušajte da proširite raspon godina</string>
+    <string name="hint_switch_to_photos">Pokušajte da pređete na fotografije</string>
+    <string name="hint_move_or_zoom_out">Pokušajte da pomerite ili udaljite mapu</string>
+    <string name="placeholder_nothing_in_sight">Ništa na vidiku</string>
+    <string name="placeholder_all_quiet">Ovde je mirno</string>
+    <string name="placeholder_empty_for_now">Za sada prazno</string>
+    <string name="placeholder_nothing_found">Još ništa nije pronađeno</string>
+    <string name="placeholder_no_traces">Još nema tragova</string>
+    <string name="placeholder_nothing_to_show">Još nema šta da se prikaže</string>
+    <string name="placeholder_nothing_from_this_time">Ništa iz tog perioda</string>
 </resources>
